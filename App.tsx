@@ -8,6 +8,7 @@ import { Visualizer } from './components/Visualizer';
 import { Knob } from './components/Knob';
 import { Meter } from './components/Meter';
 import { SourceConfigEditor } from './components/SourceConfigEditor';
+import { OutputConfigEditor } from './components/OutputConfigEditor';
 import { Source, Output, Speaker } from './types';
 
 // Mock Data
@@ -125,6 +126,9 @@ const App: React.FC = () => {
   // Support multiple active sources (Locking/Summing behavior)
   const [activeSourceIds, setActiveSourceIds] = useState<string[]>(['s1']);
 
+  // Output state
+  const [outputs, setOutputs] = useState<Output[]>(MOCK_OUTPUTS);
+  const [editingOutputId, setEditingOutputId] = useState<string | null>(null);
   const [activeOutput, setActiveOutput] = useState('o1');
   const [selectionContext, setSelectionContext] = useState<'SOURCE' | 'OUTPUT'>('SOURCE'); // Track context
   const [mainVolume, setMainVolume] = useState(75);
@@ -155,9 +159,10 @@ const App: React.FC = () => {
   const [meterBridgeRatio, setMeterBridgeRatio] = useState(0.60);
   const knobContainerRef = useRef<HTMLDivElement>(null);
 
-  // Sidebar resizing state - PERCENTAGE BASED (Default 18%)
-  const [leftSidebarPercent, setLeftSidebarPercent] = useState(18);
-  const [rightSidebarPercent, setRightSidebarPercent] = useState(18);
+  // Sidebar resizing state - PERCENTAGE BASED (Default 14%)
+  const [leftSidebarPercent, setLeftSidebarPercent] = useState(14);
+  const [rightSidebarPercent, setRightSidebarPercent] = useState(14);
+  const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
 
   const isDraggingHeight = useRef(false);
   const isDraggingRatio = useRef(false);
@@ -185,6 +190,16 @@ const App: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Track viewport width for responsive sidebar rules
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const leftSidebarWidthPx = Math.min(480, Math.max(220, (viewportWidth * leftSidebarPercent) / 100));
+  const showTrimKnob = leftSidebarWidthPx >= 250;
 
   // Drag Event Listeners
   useEffect(() => {
@@ -456,45 +471,48 @@ const App: React.FC = () => {
       <main className="flex-1 flex overflow-hidden relative">
 
         {/* Focus Mode Overlay (Backdrop) */}
-        {editingSourceId && (
+        {(editingSourceId || editingOutputId) && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] z-40 transition-opacity duration-300"></div>
         )}
 
-        {/* Left Column: Sources */}
-        <section
-          className={`bg-[#0c0d11] border-r border-[#1a1b1f] flex flex-col shrink-0 z-30 relative group/leftsidebar transition-all duration-300 ${editingSourceId ? 'z-50 border-r-0 shadow-[20px_0_50px_rgba(0,0,0,0.5)]' : ''}`}
-          style={{ width: `${leftSidebarPercent}%`, minWidth: '220px', maxWidth: '480px' }}
-          onClick={() => setSelectionContext('SOURCE')}
-        >
-          {/* Resize Handle (Left Sidebar) */}
-          {!editingSourceId && (
-            <div
-              className="absolute top-0 bottom-0 -right-1 w-2 z-50 cursor-col-resize hover:bg-[#2eb8cc]/40 transition-colors delay-75"
-              onMouseDown={startDragLeft}
-              onDoubleClick={() => setLeftSidebarPercent(18)}
-            ></div>
-          )}
+        {/* Left Column: Sources - Hidden when editing Output */}
+        {!editingOutputId && (
+          <section
+            className={`bg-[#0c0d11] border-r border-white/[0.04] flex flex-col shrink-0 relative group/leftsidebar z-30 shadow-[12px_0_40px_-5px_rgba(0,0,0,0.8)] transition-[border-color,box-shadow,background-color] duration-300 ${editingSourceId ? 'z-50 border-r-0 shadow-[20px_0_50px_rgba(0,0,0,0.5)]' : ''}`}
+            style={{ width: `${leftSidebarPercent}%`, minWidth: '220px', maxWidth: '480px' }}
+            onClick={() => setSelectionContext('SOURCE')}
+          >
+            {/* Resize Handle (Left Sidebar) */}
+            {!editingSourceId && !editingOutputId && (
+              <div
+                className="absolute top-0 bottom-0 -right-1 w-2 z-50 cursor-col-resize hover:bg-[#2eb8cc]/40 transition-colors delay-75"
+                onMouseDown={startDragLeft}
+                onDoubleClick={() => setLeftSidebarPercent(18)}
+              ></div>
+            )}
 
-          <div className="h-10 flex items-end px-2 border-b border-[#1a1b1f] bg-[#0a0b0e]/50">
-            <button className={`flex-1 pb-2 text-xs font-bold border-b-2 transition-colors ${selectionContext === 'SOURCE' ? 'text-[#d4d4d8] border-[#52525b]' : 'text-[#52525b] border-transparent'}`}>INPUT CONFIG</button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
-            {sources.map(src => (
-              <div key={src.id} className={`transition-opacity duration-300 ${editingSourceId && editingSourceId !== src.id ? 'opacity-20 pointer-events-none blur-[1px]' : ''}`}>
-                <SourceStrip
-                  source={src}
-                  selected={activeSourceIds.includes(src.id)}
-                  isEditing={editingSourceId === src.id}
-                  onSelect={handleSourceSelect}
-                  onToggleLock={toggleLock}
-                  onSettingsClick={() => setEditingSourceId(src.id)} // New Prop
-                />
-              </div>
-            ))}
-          </div>
-        </section>
+            <div className="h-10 flex items-end px-2 border-b border-[#1a1b1f] bg-[#0a0b0e]/50">
+              <button className={`flex-1 pb-2 text-xs font-bold border-b-2 transition-colors ${selectionContext === 'SOURCE' ? 'text-[#d4d4d8] border-[#52525b]' : 'text-[#52525b] border-transparent'}`}>INPUT CONFIG</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+              {sources.map(src => (
+                <div key={src.id} className={`transition-opacity duration-300 ${editingSourceId && editingSourceId !== src.id ? 'opacity-20 pointer-events-none blur-[1px]' : ''}`}>
+                  <SourceStrip
+                    source={src}
+                    selected={activeSourceIds.includes(src.id)}
+                    isEditing={editingSourceId === src.id}
+                    showTrim={showTrimKnob}
+                    onSelect={handleSourceSelect}
+                    onToggleLock={toggleLock}
+                    onSettingsClick={() => setEditingSourceId(src.id)} // New Prop
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
-        {/* Center/Right Area - Replaced by Editor when active */}
+        {/* Center Area - Editor or Visualizer */}
         {editingSourceId ? (
           <div className="flex-1 relative z-50 animate-slide-in-left editor-panel-shadow">
             <SourceConfigEditor
@@ -509,440 +527,454 @@ const App: React.FC = () => {
               }}
             />
           </div>
+        ) : editingOutputId ? (
+          /* Output Config Editor - Slides in from right, positioned left of Output panel */
+          <div className="flex-1 relative z-[60] animate-slide-in-right editor-panel-shadow-right">
+            <OutputConfigEditor
+              output={outputs.find(o => o.id === editingOutputId)!}
+              onClose={() => setEditingOutputId(null)}
+              onSave={(updated) => {
+                setOutputs(prev => prev.map(o => o.id === updated.id ? updated : o));
+                setEditingOutputId(null);
+              }}
+              onColorChange={(outputId, color) => {
+                setOutputs(prev => prev.map(o => o.id === outputId ? { ...o, color } : o));
+              }}
+            />
+          </div>
         ) : (
-          <>
-            {/* Center Column: Monitor & Visualizer */}
-            <section className="flex-1 flex flex-col min-w-[200px] relative bg-[#08090c] overflow-hidden border-x border-[#1a1b1f]/50">
+          /* Center Column: Monitor & Visualizer (The Embedded Viewport) */
+          <section className="flex-1 flex flex-col min-w-[200px] relative bg-[#030304] overflow-hidden border-x border-black/40 shadow-[inset_0_10px_30px_-10px_rgba(0,0,0,1)]">
 
-              {/* Visualizer Area (Flex-1) */}
-              <div className="flex-1 relative min-h-0 bg-[#08090c]">
-                {/* Note: Visualizer component has its own styles, ensuring it looks like a viewport */}
-                <Visualizer
-                  speakers={currentSpeakers}
-                  active={!isMute && activeSourceIds.length > 0}
-                  context={selectionContext}
-                  onContextChange={setSelectionContext}
-                  formatLabel={visualizerFormat}
-                />
+            {/* Visualizer Area (Flex-1) */}
+            <div className="flex-1 relative min-h-0 bg-[#030304]">
+              {/* Visualizer gradient overlay for depth */}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10 h-32"></div>
+
+              {/* Note: Visualizer component has its own styles, ensuring it looks like a viewport */}
+              <Visualizer
+                speakers={currentSpeakers}
+                active={!isMute && activeSourceIds.length > 0}
+                context={selectionContext}
+                onContextChange={setSelectionContext}
+                formatLabel={visualizerFormat}
+              />
+            </div>
+
+            {/* Bottom Control Deck (Resizable Height) */}
+            <div
+              className="bg-gradient-to-b from-[#111216] via-[#0e0f13] to-[#0a0b0e] border-t border-[#1a1b1f] shadow-[0_-6px_24px_rgba(0,0,0,0.7)] z-20 flex flex-col relative"
+              style={{ height: controlDeckHeight }}
+            >
+              {/* Horizontal Resize Handle - Invisible Trigger Area */}
+              <div
+                className="absolute top-0 left-0 right-0 h-1.5 -mt-0.5 cursor-row-resize z-50 group flex justify-center items-start hover:bg-[#2eb8cc]/25 transition-colors"
+                onMouseDown={startDragHeight}
+                onDoubleClick={() => setControlDeckHeight(380)}
+              >
+                {/* Subtle highlight line on hover, no center notch */}
+                <div className="w-full h-[1px] bg-transparent group-hover:bg-[#2eb8cc] shadow-[0_0_10px_rgba(46,184,204,0.4)] transition-all"></div>
               </div>
 
-              {/* Bottom Control Deck (Resizable Height) */}
-              <div
-                className="bg-gradient-to-b from-[#111216] via-[#0e0f13] to-[#0a0b0e] border-t border-[#1a1b1f] shadow-[0_-6px_24px_rgba(0,0,0,0.7)] z-20 flex flex-col relative"
-                style={{ height: controlDeckHeight }}
-              >
-                {/* Horizontal Resize Handle - Invisible Trigger Area */}
-                <div
-                  className="absolute top-0 left-0 right-0 h-1.5 -mt-0.5 cursor-row-resize z-50 group flex justify-center items-start hover:bg-[#2eb8cc]/25 transition-colors"
-                  onMouseDown={startDragHeight}
-                  onDoubleClick={() => setControlDeckHeight(380)}
-                >
-                  {/* Subtle highlight line on hover, no center notch */}
-                  <div className="w-full h-[1px] bg-transparent group-hover:bg-[#2eb8cc] shadow-[0_0_10px_rgba(46,184,204,0.4)] transition-all"></div>
-                </div>
+              {/* Bottom Control Deck (The Professional Hardware Chassis) */}
+              <ChassisCard className="flex-1 flex overflow-hidden shrink-0 z-40 relative mx-4 mb-4 mt-2">
 
-                {/* Bottom Control Deck (The Professional Hardware Chassis) */}
-                <ChassisCard className="flex-1 flex overflow-hidden shrink-0 z-40 relative mx-4 mb-4 mt-2">
+                {/* Grid Layout: L-Shape Monitor (Left) + Control Tower (Right) */}
+                <div className="w-full h-full p-1 grid grid-cols-12 gap-1 bg-[#0a0b0e]/50">
 
-                  {/* Grid Layout: L-Shape Monitor (Left) + Control Tower (Right) */}
-                  <div className="w-full h-full p-1 grid grid-cols-12 gap-1 bg-[#0a0b0e]/50">
+                  {/* Left Wing: L-Integrated Analyzer Hub (Span 8) */}
+                  <div className="col-span-8 flex flex-col gap-1 relative">
+                    {/* 1. TOP HUD HEADER: Standard Selector + Metrics */}
+                    <div className="h-9 flex items-center justify-between px-3 bg-[#0a0b0e]/30 border-b border-white/[0.05]">
+                      {/* A. Standard Selector (Left) */}
+                      <div className="relative" ref={loudnessMenuRef}>
+                        <button
+                          className="text-[10px] font-bold font-mono text-[#a1a1aa] hover:text-[#d4d4d8] transition-colors cursor-pointer flex items-center gap-2 py-1 bg-[#0a0b0e]/40 px-2 rounded border border-white/[0.04] hover:border-white/[0.1]"
+                          onClick={() => setIsLoudnessMenuOpen(!isLoudnessMenuOpen)}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#d4890f] shadow-[0_0_6px_rgba(212,137,15,0.5)] animate-pulse"></span>
+                          <span>{loudnessStandard}</span>
+                          <ChevronDown size={10} className={`text-zinc-600 transition-transform duration-200 ${isLoudnessMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
 
-                    {/* Left Wing: L-Integrated Analyzer Hub (Span 8) */}
-                    <div className="col-span-8 flex flex-col gap-1 relative">
-                      {/* 1. TOP HUD HEADER: Standard Selector + Metrics */}
-                      <div className="h-9 flex items-center justify-between px-3 bg-[#0a0b0e]/30 border-b border-white/[0.05]">
-                        {/* A. Standard Selector (Left) */}
-                        <div className="relative" ref={loudnessMenuRef}>
-                          <button
-                            className="text-[10px] font-bold font-mono text-[#a1a1aa] hover:text-[#d4d4d8] transition-colors cursor-pointer flex items-center gap-2 py-1 bg-[#0a0b0e]/40 px-2 rounded border border-white/[0.04] hover:border-white/[0.1]"
-                            onClick={() => setIsLoudnessMenuOpen(!isLoudnessMenuOpen)}
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#d4890f] shadow-[0_0_6px_rgba(212,137,15,0.5)] animate-pulse"></span>
-                            <span>{loudnessStandard}</span>
-                            <ChevronDown size={10} className={`text-zinc-600 transition-transform duration-200 ${isLoudnessMenuOpen ? 'rotate-180' : ''}`} />
-                          </button>
-
-                          {/* HUD Dropdown */}
-                          {isLoudnessMenuOpen && (
-                            <div className="absolute top-full left-0 mt-1 w-56 bg-[#111216] border border-[#2a2b30] shadow-2xl z-50 rounded-md overflow-hidden max-h-80 overflow-y-auto custom-scrollbar">
-                              {LOUDNESS_STANDARDS.map(std => (
-                                <button
-                                  key={std.name}
-                                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#1a1b1f] transition-colors group"
-                                  onClick={() => { setLoudnessStandard(std.name); setIsLoudnessMenuOpen(false); }}
-                                >
-                                  <span className={`text-[10px] font-bold font-mono ${loudnessStandard === std.name ? 'text-[#d4890f]' : 'text-[#71717a]'}`}>{std.name}</span>
-                                  <span className={`text-[9px] font-mono ${loudnessStandard === std.name ? 'text-[#d4890f]/70' : 'text-[#52525b]'}`}>{std.target} LUFS</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-{/* B. HUD Metrics (Right) */}
-                        <div className="flex items-center gap-2">
-                          {(() => {
-                            const targetLufs = getTargetLufs(loudnessStandard);
-                            const currentLufsValue = activeSourceIds.length ? (lufsMeter.level * 0.435 - 50) : null;
-                            return [
-                              { label: 'M', value: activeSourceIds.length ? (lufsMeter.level * 0.4 - 45).toFixed(1) : '-inf' },
-                              { label: 'S', value: activeSourceIds.length ? (lufsMeter.level * 0.42 - 47).toFixed(1) : '-inf' },
-                              { label: 'I', value: currentLufsValue !== null ? currentLufsValue.toFixed(1) : '-inf', isMain: true, targetLufs },
-                              { label: 'TP', value: activeSourceIds.length ? (lufsMeter.level * 0.35 - 40).toFixed(1) : '-inf' },
-                            ].map(m => (
-                              <div key={m.label} className={`flex flex-col items-end justify-center h-7 bg-[#0a0b0e] rounded border px-1.5 relative overflow-hidden ${
-                                m.isMain ? 'w-16 border-[#d4890f]/30' : 'w-12 border-white/[0.05]'
-                              }`}>
-                                <span className="text-[7px] font-bold text-[#52525b] tracking-wide">{m.label}</span>
-                                <span className={`text-[10px] font-bold font-mono leading-none tabular-nums ${
-                                  m.isMain 
-                                    ? (m.value !== '-inf' && Math.abs(parseFloat(m.value) - m.targetLufs) <= 1
-                                        ? 'text-[#0fa070]'
-                                        : m.value !== '-inf' && parseFloat(m.value) > m.targetLufs
-                                          ? 'text-[#d4890f]'
-                                          : 'text-[#7db4c9]')
-                                    : 'text-[#d4890f]'
-                                } drop-shadow-[0_0_5px_rgba(212,137,15,0.25)]`}>{m.value}</span>
-                                <div className="absolute top-0 right-0 w-full h-[1px] bg-white/[0.08]"></div>
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      </div>
-
-                      {/* 2. METER BRIDGE BODY */}
-                      <InsetPanel className="flex-1 w-full bg-[#0a0b0e] relative flex flex-col">
-
-                        {/* Header: Engraved Hardware Title */}
-                        <EngravedHeader label="INPUT MONITORING" color="amber" className="bg-transparent border-b-0 opacity-80" />
-
-                        {/* Meter Area - Horizontal Layout with Scales */}
-                        <div className="flex-1 w-full px-2 pb-2 flex relative">
-
-                          {/* LEFT: dBFS Scale Column */}
-                          <div className="w-8 shrink-0 flex flex-col relative mr-1">
-                            {/* Scale container - aligned with meter track area */}
-                            <div className="h-1 shrink-0"></div>{/* Clip LED space */}
-                            <div className="flex-1 relative">
-                              {[
-                                { label: '0', pct: 100 },
-                                { label: '-6', pct: 90 },
-                                { label: '-12', pct: 80 },
-                                { label: '-18', pct: 70 },
-                                { label: '-24', pct: 60 },
-                                { label: '-36', pct: 40 },
-                                { label: '-48', pct: 20 },
-                                { label: '-60', pct: 0 },
-                              ].map((t) => (
-                                <div
-                                  key={t.label}
-                                  className="absolute right-0 flex items-center"
-                                  style={{ bottom: `${t.pct}%`, transform: 'translateY(50%)' }}
-                                >
-                                  <span className="text-[10px] font-mono text-[#71717a] tabular-nums leading-none">{t.label}</span>
-                                </div>
-                              ))}
-                            </div>
-                            {/* Label area */}
-                            <div className="h-6 shrink-0 flex items-end justify-end">
-                              <span className="text-[9px] font-bold text-[#52525b]">dB</span>
-                            </div>
-                          </div>
-
-                          {/* CENTER: Meters with horizontal grid lines */}
-                          <div className="flex-1 flex gap-[2px] relative">
-                            {/* Horizontal scale lines (spanning all meters) */}
-                            <div className="absolute inset-0 pointer-events-none z-10" style={{ top: '4px', bottom: '28px' }}>
-                              {[
-                                { pct: 100, major: true },
-                                { pct: 90, major: false },
-                                { pct: 80, major: false },
-                                { pct: 70, major: false },
-                                { pct: 60, major: false },
-                                { pct: 40, major: false },
-                                { pct: 20, major: false },
-                                { pct: 0, major: true },
-                              ].map((line) => (
-                                <div
-                                  key={line.pct}
-                                  className={`absolute left-0 right-0 ${line.major ? 'h-px bg-white/15' : 'h-px bg-white/[0.06]'}`}
-                                  style={{ bottom: `${line.pct}%` }}
-                                />
-                              ))}
-                            </div>
-
-                            {/* Meter bars */}
-                            {visibleMeters.map((channel) => {
-                              const gapAfterChannelIds = new Set(['LFE', 'Rw']);
-                              const isGapAfter = gapAfterChannelIds.has(channel.id);
-
-                              return (
-                                <React.Fragment key={channel.id}>
-                                  <div className="flex-1 h-full min-w-0 relative group">
-                                    <Meter
-                                      level={meterValues[channel.originalIndex]?.level ?? 0}
-                                      peak={meterValues[channel.originalIndex]?.peak ?? 0}
-                                      color={channel.color}
-                                      label={channel.label}
-                                    />
-                                  </div>
-                                  {isGapAfter && <div className="w-2 shrink-0"></div>}
-                                </React.Fragment>
-                              );
-                            })}
-                          </div>
-
-                          {/* Divider */}
-                          <div className="w-3 shrink-0 relative mx-1">
-                            <div className="absolute top-2 bottom-6 left-1/2 w-px bg-[#3f3f46]/50"></div>
-                          </div>
-
-                          {/* RIGHT: Single LUFS Meter with Scale */}
-                          {(() => {
-                            const targetLufs = getTargetLufs(loudnessStandard);
-                            const lufsToPercent = (lufs: number) => Math.max(0, Math.min(100, ((lufs + 36) / 27) * 85 + 10));
-                            const targetPct = lufsToPercent(targetLufs);
-                            
-                            // Base scale points
-                            const baseScalePoints = [-9, -14, -23, -27, -36];
-                            // Add target if not in base points
-                            const allPoints = baseScalePoints.includes(targetLufs) 
-                              ? baseScalePoints 
-                              : [...baseScalePoints, targetLufs].sort((a, b) => b - a);
-                            const lufsScalePoints = allPoints.map(v => ({ label: String(v), lufs: v }));
-
-                            return (
-                              <div className="flex shrink-0">
-                                {/* LUFS Meter */}
-                                <div className="w-8 h-full flex flex-col">
-                                  {/* Clip LED */}
-                                  <div className={`w-full h-1 mb-1 rounded-[1px] transition-colors duration-100 ${lufsMeter.peak >= 99 ? 'bg-[#dc2626] shadow-[0_0_6px_#dc2626]' : 'bg-[#1a0a0a]'}`}></div>
-                                  {/* Meter Track */}
-                                  <div className="flex-1 w-full bg-[#0a0b0e] relative overflow-hidden rounded-[1px]">
-                                    {/* Target indicator */}
-                                    <div
-                                      className="absolute left-0 right-0 h-0.5 bg-[#d4890f]/60 shadow-[0_0_4px_rgba(212,137,15,0.35)]"
-                                      style={{ bottom: `${targetPct}%` }}
-                                    />
-                                    {/* LUFS Bar */}
-                                    <div
-                                      className="absolute bottom-0 w-full bg-[#3b82f6] transition-all duration-75 ease-out"
-                                      style={{ height: `${Math.min(100, Math.max(0, lufsMeter.level))}%` }}
-                                    ></div>
-                                    {/* Peak line */}
-                                    <div
-                                      className="absolute w-full h-[1px] bg-[#e4e4e7] transition-all duration-300 ease-out z-10 shadow-sm mix-blend-screen"
-                                      style={{ bottom: `${Math.min(100, Math.max(0, lufsMeter.peak))}%` }}
-                                    ></div>
-                                  </div>
-                                  {/* Label */}
-                                  <div className="w-full flex flex-col items-center gap-0.5 mt-1">
-                                    <span className="text-[9px] font-bold tracking-tight leading-none uppercase text-[#71717a]">LUFS</span>
-                                    <div className="w-full h-1 rounded-sm bg-[#3b82f6] opacity-70"></div>
-                                  </div>
-                                </div>
-
-                                {/* LUFS Scale */}
-                                <div className="w-6 h-full flex flex-col ml-0.5">
-                                  <div className="h-1 mb-1 shrink-0"></div>
-                                  <div className="flex-1 relative">
-                                    {lufsScalePoints.map((t) => {
-                                      const pct = lufsToPercent(t.lufs);
-                                      const isTarget = t.lufs === targetLufs;
-                                      return (
-                                        <div
-                                          key={t.label}
-                                          className="absolute left-0 flex items-center gap-0.5"
-                                          style={{ bottom: `${pct}%`, transform: 'translateY(50%)' }}
-                                        >
-                                          <span className={`w-1 h-px ${isTarget ? 'bg-[#d4890f]' : 'bg-[#52525b]'}`}></span>
-                                          <span className={`text-[8px] font-mono tabular-nums leading-none ${
-                                            isTarget 
-                                              ? 'text-[#d4890f] font-bold' 
-                                              : 'text-[#71717a]'
-                                          }`}>{t.label}</span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  <div className="h-6 shrink-0"></div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                        </div>
-                      </InsetPanel>
-                    </div>
-
-                    {/* Right Wing: The Offset Control Tower (Span 4) */}
-                    <div className="col-span-4 flex flex-col relative pt-4 pl-1">
-                      {/* Offset Top Space for "System Status LED" */}
-                      <div className="absolute top-0 right-2 h-4 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#0fa070] shadow-[0_0_8px_rgba(15,160,112,0.4)] animate-pulse"></div>
-                        <span className="text-[9px] font-bold text-[#52525b] tracking-wider">SYNC 48K</span>
-                      </div>
-
-                      {/* The Control Tower Panel */}
-                      <InsetPanel className="flex-1 w-full bg-[#111216] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.7)] border-t border-white/[0.06] flex flex-col relative" >
-                        {/* Reference used for scaling calculation if needed */}
-                        <div className="absolute inset-0 pointer-events-none" ref={knobContainerRef}></div>
-
-                        <EngravedHeader label="MONITOR LEVEL" color="cyan" className="bg-transparent border-b-0 opacity-80" />
-
-                        {/* Staggered Content Area */}
-                        <div className="flex-1 flex flex-col items-center justify-between py-2 px-4 relative z-10">
-
-                          {/* A. Ref Selectors - Segmented Control Style */}
-                          <div className="flex p-0.5 bg-[#08090c]/60 rounded-lg border border-white/[0.06] shadow-inner mb-2">
-                            {refPresets.map((ref) => (
+                        {/* HUD Dropdown */}
+                        {isLoudnessMenuOpen && (
+                          <div className="absolute top-full left-0 mt-1 w-56 bg-[#111216] border border-[#2a2b30] shadow-2xl z-50 rounded-md overflow-hidden max-h-80 overflow-y-auto custom-scrollbar">
+                            {LOUDNESS_STANDARDS.map(std => (
                               <button
-                                key={ref.id}
-                                onClick={() => setMainVolume((ref.level + 80) * 1.25)}
-                                className={cn(
-                                  "px-3 py-1 text-[9px] font-bold rounded-md transition-all",
-                                  Math.abs(((mainVolume / 100) * 80 - 80) - ref.level) < 0.5
-                                    ? "bg-[#1a1b1f] text-[#2eb8cc] shadow-sm border border-[#2a2b30]"
-                                    : "text-[#52525b] hover:text-[#a1a1aa]"
-                                )}
+                                key={std.name}
+                                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#1a1b1f] transition-colors group"
+                                onClick={() => { setLoudnessStandard(std.name); setIsLoudnessMenuOpen(false); }}
                               >
-                                {ref.name}
+                                <span className={`text-[10px] font-bold font-mono ${loudnessStandard === std.name ? 'text-[#d4890f]' : 'text-[#71717a]'}`}>{std.name}</span>
+                                <span className={`text-[9px] font-mono ${loudnessStandard === std.name ? 'text-[#d4890f]/70' : 'text-[#52525b]'}`}>{std.target} LUFS</span>
                               </button>
                             ))}
                           </div>
+                        )}
+                      </div>
 
-                          {/* B. The Hero Knob */}
-                          <div className="relative flex-1 flex items-center justify-center w-full min-h-[140px]">
-                            {/* Breathing Glow behind Knob */}
-                            {(isMute || isDim) && (
-                              <div
-                                className={cn(
-                                  "absolute w-40 h-40 rounded-full blur-[40px] pointer-events-none",
-                                  isMute ? "bg-[#dc2626]/25" : "bg-[#d4890f]/25"
-                                )}
-                                style={{ animation: 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
-                              ></div>
-                            )}
-                            {/* Decor Rings */}
-                            <div className="absolute inset-0 border border-[#2a2b30]/40 rounded-full scale-[0.85] opacity-50"></div>
-
-                            <Knob
-                              value={mainVolume}
-                              onChange={setMainVolume}
-                              size={140}
-                              color={isMute ? '#dc2626' : isDim ? '#d4890f' : '#2eb8cc'}
-                              max={12}
-                              min={-96}
-                            />
-
-                            {/* Center Value Display */}
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-2">
-                              <span className={cn(
-                                "text-2xl font-bold font-mono tracking-tighter drop-shadow-md",
-                                isMute ? "text-[#dc2626]" : isDim ? "text-[#d4890f]" : "text-[#2eb8cc]"
-                              )}>
-                                {(mainVolume === 0 ? '-inf' : ((mainVolume / 100) * 80 - 80).toFixed(1))}
-                              </span>
-                              <span className="text-[9px] text-[#52525b] font-bold tracking-widest -mt-1">dB</span>
+                      {/* B. HUD Metrics (Right) */}
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const targetLufs = getTargetLufs(loudnessStandard);
+                          const currentLufsValue = activeSourceIds.length ? (lufsMeter.level * 0.435 - 50) : null;
+                          return [
+                            { label: 'M', value: activeSourceIds.length ? (lufsMeter.level * 0.4 - 45).toFixed(1) : '-inf' },
+                            { label: 'S', value: activeSourceIds.length ? (lufsMeter.level * 0.42 - 47).toFixed(1) : '-inf' },
+                            { label: 'I', value: currentLufsValue !== null ? currentLufsValue.toFixed(1) : '-inf', isMain: true, targetLufs },
+                            { label: 'TP', value: activeSourceIds.length ? (lufsMeter.level * 0.35 - 40).toFixed(1) : '-inf' },
+                          ].map(m => (
+                            <div key={m.label} className={`flex flex-col items-end justify-center h-7 bg-[#0a0b0e] rounded border px-1.5 relative overflow-hidden ${m.isMain ? 'w-16 border-[#d4890f]/30 bg-[#1a1b1f]/80' : 'w-12 border-white/[0.1] bg-[#1a1b1f]/40'
+                              }`}>
+                              <span className="text-[8px] font-bold text-[#a1a1aa] tracking-wide mb-0.5">{m.label}</span>
+                              <span className={`text-[10px] font-bold font-mono leading-none tabular-nums ${m.isMain
+                                ? (m.value !== '-inf' && Math.abs(parseFloat(m.value) - m.targetLufs) <= 1
+                                  ? 'text-[#0fa070]'
+                                  : m.value !== '-inf' && parseFloat(m.value) > m.targetLufs
+                                    ? 'text-[#d4890f]'
+                                    : 'text-[#7db4c9]')
+                                : 'text-[#d4890f]'
+                                } drop-shadow-[0_0_5px_rgba(212,137,15,0.25)]`}>{m.value}</span>
+                              <div className="absolute top-0 right-0 w-full h-[1px] bg-white/[0.08]"></div>
                             </div>
-                          </div>
-
-
-                          {/* C. Bottom Action Strip (Tactile Buttons) */}
-                          <div className="w-full grid grid-cols-2 gap-3 mt-auto">
-                            <button
-                              onClick={() => setIsDim(!isDim)}
-                              className={cn(
-                                "h-8 rounded flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 active:scale-[0.95] shadow-lg relative isolate overflow-visible",
-                                isDim
-                                  ? "bg-[#d4890f] border-[#b8770d] text-black scale-[1.02]"
-                                  : "bg-[#151619] border-[#2a2b30] text-[#52525b] hover:text-[#a1a1aa] hover:border-[#3f3f46]"
-                              )}
-                            >
-                              {/* Breathing Glow - Always rendered, visibility controlled by opacity */}
-                              <div
-                                className={cn(
-                                  "absolute -inset-1 bg-[#d4890f]/40 blur-md rounded -z-10 transition-all duration-500",
-                                  isDim ? "opacity-100 scale-100" : "opacity-0 scale-75"
-                                )}
-                                style={{ animation: isDim ? 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}
-                              ></div>
-                              DIM
-                            </button>
-
-                            <button
-                              onClick={() => setIsMute(!isMute)}
-                              className={cn(
-                                "h-8 rounded flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 active:scale-[0.95] shadow-lg relative isolate overflow-visible",
-                                isMute
-                                  ? "bg-[#dc2626] border-[#b91c1c] text-white scale-[1.02]"
-                                  : "bg-[#151619] border-[#2a2b30] text-[#52525b] hover:text-[#a1a1aa] hover:border-[#3f3f46]"
-                              )}
-                            >
-                              {/* Breathing Glow - Always rendered, visibility controlled by opacity */}
-                              <div
-                                className={cn(
-                                  "absolute -inset-1 bg-[#dc2626]/40 blur-md rounded -z-10 transition-all duration-500",
-                                  isMute ? "opacity-100 scale-100" : "opacity-0 scale-75"
-                                )}
-                                style={{ animation: isMute ? 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}
-                              ></div>
-                              MUTE
-                            </button>
-                          </div>
-
-                        </div>
-                      </InsetPanel>
+                          ));
+                        })()}
+                      </div>
                     </div>
 
+                    {/* 2. METER BRIDGE BODY */}
+                    <InsetPanel className="flex-1 w-full bg-[#0a0b0e] relative flex flex-col">
+
+                      {/* Header: Engraved Hardware Title */}
+                      <EngravedHeader label="INPUT MONITORING" color="amber" className="bg-transparent border-b-0 opacity-80" />
+
+                      {/* Meter Area - Horizontal Layout with Scales */}
+                      <div className="flex-1 w-full px-2 pb-2 flex relative">
+
+                        {/* LEFT: dBFS Scale Column */}
+                        <div className="w-8 shrink-0 flex flex-col relative mr-1">
+                          {/* Scale container - aligned with meter track area */}
+                          <div className="h-1 shrink-0"></div>{/* Clip LED space */}
+                          <div className="flex-1 relative">
+                            {[
+                              { label: '0', pct: 100 },
+                              { label: '-6', pct: 90 },
+                              { label: '-12', pct: 80 },
+                              { label: '-18', pct: 70 },
+                              { label: '-24', pct: 60 },
+                              { label: '-36', pct: 40 },
+                              { label: '-48', pct: 20 },
+                              { label: '-60', pct: 0 },
+                            ].map((t) => (
+                              <div
+                                key={t.label}
+                                className="absolute right-0 flex items-center"
+                                style={{ bottom: `${t.pct}%`, transform: 'translateY(50%)' }}
+                              >
+                                <span className="text-[10px] font-mono text-[#71717a] tabular-nums leading-none">{t.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Label area */}
+                          <div className="h-6 shrink-0 flex items-end justify-end">
+                            <span className="text-[9px] font-bold text-[#52525b]">dB</span>
+                          </div>
+                        </div>
+
+                        {/* CENTER: Meters with horizontal grid lines */}
+                        <div className="flex-1 flex gap-[2px] relative">
+                          {/* Horizontal scale lines (spanning all meters) */}
+                          <div className="absolute inset-0 pointer-events-none z-10" style={{ top: '4px', bottom: '28px' }}>
+                            {[
+                              { pct: 100, major: true },
+                              { pct: 90, major: false },
+                              { pct: 80, major: false },
+                              { pct: 70, major: false },
+                              { pct: 60, major: false },
+                              { pct: 40, major: false },
+                              { pct: 20, major: false },
+                              { pct: 0, major: true },
+                            ].map((line) => (
+                              <div
+                                key={line.pct}
+                                className={`absolute left-0 right-0 ${line.major ? 'h-px bg-white/15' : 'h-px bg-white/[0.06]'}`}
+                                style={{ bottom: `${line.pct}%` }}
+                              />
+                            ))}
+                          </div>
+
+                          {/* Meter bars */}
+                          {visibleMeters.map((channel) => {
+                            const gapAfterChannelIds = new Set(['LFE', 'Rw']);
+                            const isGapAfter = gapAfterChannelIds.has(channel.id);
+
+                            return (
+                              <React.Fragment key={channel.id}>
+                                <div className="flex-1 h-full min-w-0 relative group">
+                                  <Meter
+                                    level={meterValues[channel.originalIndex]?.level ?? 0}
+                                    peak={meterValues[channel.originalIndex]?.peak ?? 0}
+                                    color={channel.color}
+                                    label={channel.label}
+                                  />
+                                </div>
+                                {isGapAfter && <div className="w-2 shrink-0"></div>}
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-3 shrink-0 relative mx-1">
+                          <div className="absolute top-2 bottom-6 left-1/2 w-px bg-[#3f3f46]/50"></div>
+                        </div>
+
+                        {/* RIGHT: Single LUFS Meter with Scale */}
+                        {(() => {
+                          const targetLufs = getTargetLufs(loudnessStandard);
+                          const lufsToPercent = (lufs: number) => Math.max(0, Math.min(100, ((lufs + 36) / 27) * 85 + 10));
+                          const targetPct = lufsToPercent(targetLufs);
+
+                          // Base scale points
+                          const baseScalePoints = [-9, -14, -23, -27, -36];
+                          // Add target if not in base points
+                          const allPoints = baseScalePoints.includes(targetLufs)
+                            ? baseScalePoints
+                            : [...baseScalePoints, targetLufs].sort((a, b) => b - a);
+                          const lufsScalePoints = allPoints.map(v => ({ label: String(v), lufs: v }));
+
+                          return (
+                            <div className="flex shrink-0">
+                              {/* LUFS Meter */}
+                              <div className="w-8 h-full flex flex-col">
+                                {/* Clip LED */}
+                                <div className={`w-full h-1 mb-1 rounded-[1px] transition-colors duration-100 ${lufsMeter.peak >= 99 ? 'bg-[#dc2626] shadow-[0_0_6px_#dc2626]' : 'bg-[#1a0a0a]'}`}></div>
+                                {/* Meter Track */}
+                                <div className="flex-1 w-full bg-[#0a0b0e] relative overflow-hidden rounded-[1px]">
+                                  {/* Target indicator */}
+                                  <div
+                                    className="absolute left-0 right-0 h-0.5 bg-[#d4890f]/60 shadow-[0_0_4px_rgba(212,137,15,0.35)]"
+                                    style={{ bottom: `${targetPct}%` }}
+                                  />
+                                  {/* LUFS Bar */}
+                                  <div
+                                    className="absolute bottom-0 w-full bg-[#3b82f6] transition-all duration-75 ease-out"
+                                    style={{ height: `${Math.min(100, Math.max(0, lufsMeter.level))}%` }}
+                                  ></div>
+                                  {/* Peak line */}
+                                  <div
+                                    className="absolute w-full h-[1px] bg-[#e4e4e7] transition-all duration-300 ease-out z-10 shadow-sm mix-blend-screen"
+                                    style={{ bottom: `${Math.min(100, Math.max(0, lufsMeter.peak))}%` }}
+                                  ></div>
+                                </div>
+                                {/* Label */}
+                                <div className="w-full flex flex-col items-center gap-0.5 mt-1">
+                                  <span className="text-[9px] font-bold tracking-tight leading-none uppercase text-[#71717a]">LUFS</span>
+                                  <div className="w-full h-1 rounded-sm bg-[#3b82f6] opacity-70"></div>
+                                </div>
+                              </div>
+
+                              {/* LUFS Scale */}
+                              <div className="w-6 h-full flex flex-col ml-0.5">
+                                <div className="h-1 mb-1 shrink-0"></div>
+                                <div className="flex-1 relative">
+                                  {lufsScalePoints.map((t) => {
+                                    const pct = lufsToPercent(t.lufs);
+                                    const isTarget = t.lufs === targetLufs;
+                                    return (
+                                      <div
+                                        key={t.label}
+                                        className="absolute left-0 flex items-center gap-0.5"
+                                        style={{ bottom: `${pct}%`, transform: 'translateY(50%)' }}
+                                      >
+                                        <span className={`w-1 h-px ${isTarget ? 'bg-[#d4890f]' : 'bg-[#52525b]'}`}></span>
+                                        <span className={`text-[8px] font-mono tabular-nums leading-none ${isTarget
+                                          ? 'text-[#d4890f] font-bold'
+                                          : 'text-[#71717a]'
+                                          }`}>{t.label}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div className="h-6 shrink-0"></div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                      </div>
+                    </InsetPanel>
                   </div>
-                </ChassisCard>
+
+                  {/* Right Wing: The Offset Control Tower (Span 4) */}
+                  <div className="col-span-4 flex flex-col relative pt-4 pl-1">
+
+                    {/* The Control Tower Panel */}
+                    <InsetPanel className="flex-1 w-full bg-[#111216] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.7)] border-t border-white/[0.06] flex flex-col relative" >
+                      {/* Reference used for scaling calculation if needed */}
+                      <div className="absolute inset-0 pointer-events-none" ref={knobContainerRef}></div>
+
+                      <EngravedHeader label="MONITOR LEVEL" color="cyan" className="bg-transparent border-b-0 opacity-80" />
+
+                      {/* Staggered Content Area */}
+                      <div className="flex-1 flex flex-col items-center justify-between py-2 px-4 relative z-10">
+
+                        {/* A. Ref Selectors - Segmented Control Style */}
+                        <div className="flex p-0.5 bg-[#08090c]/60 rounded-lg border border-white/[0.06] shadow-inner mb-2">
+                          {refPresets.map((ref) => (
+                            <button
+                              key={ref.id}
+                              onClick={() => setMainVolume((ref.level + 80) * 1.25)}
+                              className={cn(
+                                "px-3 py-1 text-[9px] font-bold rounded-md transition-all",
+                                Math.abs(((mainVolume / 100) * 80 - 80) - ref.level) < 0.5
+                                  ? "bg-[#1a1b1f] text-[#2eb8cc] shadow-sm border border-[#2a2b30]"
+                                  : "bg-[#18181b] border border-[#3f3f46] text-[#a1a1aa] hover:text-[#d4d4d8] hover:border-[#52525b]"
+                              )}>
+
+                              {ref.name}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* B. The Hero Knob */}
+                        <div className="relative flex-1 flex items-center justify-center w-full min-h-[140px]">
+                          {/* Breathing Glow behind Knob */}
+                          {(isMute || isDim) && (
+                            <div
+                              className={cn(
+                                "absolute w-40 h-40 rounded-full blur-[40px] pointer-events-none",
+                                isMute ? "bg-[#dc2626]/25" : "bg-[#d4890f]/25"
+                              )}
+                              style={{ animation: 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+                            ></div>
+                          )}
+                          {/* Decor Rings */}
+                          <div className="absolute inset-0 border border-[#2a2b30]/40 rounded-full scale-[0.85] opacity-50"></div>
+
+                          <Knob
+                            value={mainVolume}
+                            onChange={setMainVolume}
+                            size={140}
+                            color={isMute ? '#dc2626' : isDim ? '#d4890f' : '#2eb8cc'}
+                            max={12}
+                            min={-96}
+                          />
+
+                          {/* Center Value Display */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-2">
+                            <span className={cn(
+                              "text-2xl font-bold font-mono tracking-tighter drop-shadow-md",
+                              isMute ? "text-[#dc2626]" : isDim ? "text-[#d4890f]" : "text-[#2eb8cc]"
+                            )}>
+                              {(mainVolume === 0 ? '-inf' : ((mainVolume / 100) * 80 - 80).toFixed(1))}
+                            </span>
+                            <span className="text-[9px] text-[#52525b] font-bold tracking-widest -mt-1">dB</span>
+                          </div>
+                        </div>
 
 
-              </div>
-            </section>
+                        {/* C. Bottom Action Strip (Tactile Buttons) */}
+                        <div className="w-full grid grid-cols-2 gap-3 mt-auto">
+                          <button
+                            onClick={() => setIsDim(!isDim)}
+                            className={cn(
+                              "h-8 rounded flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 active:scale-[0.95] shadow-lg relative isolate overflow-visible",
+                              isDim
+                                ? "bg-[#d4890f] border-[#b8770d] text-black scale-[1.02]"
+                                : "bg-[#18181b] border-[#3f3f46] text-[#a1a1aa] hover:text-[#d4d4d8] hover:border-[#52525b]"
+                            )}
+                          >
+                            {/* Breathing Glow - Always rendered, visibility controlled by opacity */}
+                            <div
+                              className={cn(
+                                "absolute -inset-1 bg-[#d4890f]/40 blur-md rounded -z-10 transition-all duration-500",
+                                isDim ? "opacity-100 scale-100" : "opacity-0 scale-75"
+                              )}
+                              style={{ animation: isDim ? 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}
+                            ></div>
+                            DIM
+                          </button>
 
-            {/* Right Column: Outputs */}
-            <section
-              className="bg-[#0c0d11] border-l border-[#1a1b1f] flex flex-col shrink-0 z-10 relative"
-              style={{ width: `${rightSidebarPercent}%`, minWidth: '220px', maxWidth: '480px' }}
-            >
-              {/* Resize Handle (Right Sidebar) */}
+                          <button
+                            onClick={() => setIsMute(!isMute)}
+                            className={cn(
+                              "h-8 rounded flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 active:scale-[0.95] shadow-lg relative isolate overflow-visible",
+                              isMute
+                                ? "bg-[#dc2626] border-[#b91c1c] text-white scale-[1.02]"
+                                : "bg-[#18181b] border-[#3f3f46] text-[#a1a1aa] hover:text-[#d4d4d8] hover:border-[#52525b]"
+                            )}
+                          >
+                            {/* Breathing Glow - Always rendered, visibility controlled by opacity */}
+                            <div
+                              className={cn(
+                                "absolute -inset-1 bg-[#dc2626]/40 blur-md rounded -z-10 transition-all duration-500",
+                                isMute ? "opacity-100 scale-100" : "opacity-0 scale-75"
+                              )}
+                              style={{ animation: isMute ? 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}
+                            ></div>
+                            MUTE
+                          </button>
+                        </div>
+
+                      </div>
+                    </InsetPanel>
+                  </div>
+
+                </div>
+              </ChassisCard>
+
+
+            </div>
+          </section>
+        )}
+
+        {/* Right Column: Outputs - Always visible, but hidden when editing Source */}
+        {!editingSourceId && (
+          <section
+            className={`bg-[#0c0d11] border-l border-white/[0.04] flex flex-col shrink-0 relative z-30 shadow-[-12px_0_40px_-5px_rgba(0,0,0,0.8)] transition-[border-color,box-shadow,background-color] duration-300 ${editingOutputId ? 'z-50 border-l-0' : ''}`}
+            style={{ width: `${rightSidebarPercent}%`, minWidth: '220px', maxWidth: '480px' }}
+          >
+            {/* Resize Handle (Right Sidebar) */}
+            {!editingSourceId && !editingOutputId && (
               <div
                 className="absolute top-0 bottom-0 -left-1 w-2 z-50 cursor-col-resize hover:bg-[#2eb8cc]/40 transition-colors delay-75"
                 onMouseDown={startDragRight}
                 onDoubleClick={() => setRightSidebarPercent(18)}
               ></div>
+            )}
 
-              <div className="h-10 flex items-end px-2 border-b border-[#1a1b1f] bg-[#0a0b0e]/50">
-                <button className="flex-1 pb-2 text-xs font-bold text-[#d4d4d8] border-b-2 border-[#52525b]">OUTPUTS</button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
-                {MOCK_OUTPUTS.map(out => (
+            <div className="h-10 flex items-end px-2 border-b border-[#1a1b1f] bg-[#0a0b0e]/50">
+              <button className="flex-1 pb-2 text-xs font-bold text-[#d4d4d8] border-b-2 border-[#52525b]">OUTPUTS</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+              {outputs.map(out => (
+                <div key={out.id} className={`transition-opacity duration-300 ${editingOutputId && editingOutputId !== out.id ? 'opacity-20 pointer-events-none blur-[1px]' : ''}`}>
                   <OutputStrip
-                    key={out.id}
                     output={out}
                     selected={activeOutput === out.id}
                     onSelect={setActiveOutput}
+                    onSettingsClick={() => setEditingOutputId(out.id)}
                     isMuted={isMute}
+                    isEditing={editingOutputId === out.id}
                   />
-                ))}
+                </div>
+              ))}
 
-                <div className="mt-4 pt-4 border-t border-[#1a1b1f]">
-                  <div className="relative w-full rounded-lg p-2 mb-3 border bg-[#111216] border-[#2a2b30] hover:border-[#3f3f46] transition-colors">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-xs font-bold text-[#71717a] uppercase tracking-wider">Downmix A</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="text-[#52525b] font-mono text-[10px]">STEREO</div>
-                      <div className="h-6 w-10 bg-[#08090c] rounded border border-[#1a1b1f] shadow-inner"></div>
-                    </div>
+              <div className="mt-4 pt-4 border-t border-[#1a1b1f]">
+                <div className="relative w-full rounded-lg p-2 mb-3 border bg-[#111216] border-[#2a2b30] hover:border-[#3f3f46] transition-colors">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-xs font-bold text-[#71717a] uppercase tracking-wider">Downmix A</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="text-[#52525b] font-mono text-[10px]">STEREO</div>
+                    <div className="h-6 w-10 bg-[#08090c] rounded border border-[#1a1b1f] shadow-inner"></div>
                   </div>
                 </div>
               </div>
-            </section>
-
-          </>
+            </div>
+          </section>
         )}
 
       </main>

@@ -86,6 +86,7 @@ const getInitialChannels = (format: string) => {
 export const SourceConfigEditor: React.FC<SourceConfigEditorProps> = ({ source, onClose, onSave, onColorChange }) => {
     const [name, setName] = useState(source.name);
     const [format, setFormat] = useState(source.format);
+    const [mainTrim, setMainTrim] = useState(0);
     const [themeColor, setThemeColor] = useState(() => getInitialThemeColor(source.color));
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [channelConfig, setChannelConfig] = useState(() => getInitialChannels(source.format));
@@ -145,28 +146,9 @@ export const SourceConfigEditor: React.FC<SourceConfigEditorProps> = ({ source, 
     }, []);
 
     const handleSpeakerClick = (speakerId: string, mode: 'SOLO' | 'MUTE') => {
-        // Decoupled: Solo/Mute click does NOT trigger Edit Selection
-        // setSelectedChannelId(speakerId); 
-
-
-        setChannelConfig(prev => {
-            const idx = prev.findIndex(ch => ch.speaker === speakerId);
-            if (idx === -1) return prev;
-
-            const newConf = [...prev];
-            const ch = { ...newConf[idx] };
-
-            if (mode === 'SOLO') {
-                ch.solo = !ch.solo;
-                if (ch.solo) ch.muted = false;
-            } else {
-                ch.muted = !ch.muted;
-                if (ch.muted) ch.solo = false;
-            }
-
-            newConf[idx] = ch;
-            return newConf;
-        });
+        // Interaction Update: Click ONLY selects the channel (Edit Focus)
+        // Solo/Mute is handled via Drag Select or List controls
+        setSelectedChannelId(prev => prev === speakerId ? null : speakerId);
     };
 
     const handleCleanAll = () => {
@@ -366,17 +348,19 @@ export const SourceConfigEditor: React.FC<SourceConfigEditorProps> = ({ source, 
                             />
                         </div>
 
-                        {/* Main Trim Control - Professional Slider */}
+                        {/* Main Trim Control - Professional Knob */}
                         <div className="flex items-center gap-4">
                             <label className="text-[9px] font-semibold text-zinc-500 uppercase tracking-[0.2em]">Main Trim</label>
                             <div className="flex items-center gap-3">
-                                <div className="w-28 h-1.5 bg-zinc-800 rounded-full relative group cursor-pointer">
-                                    {/* Track Fill */}
-                                    <div className="w-1/2 h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full"></div>
-                                    {/* Thumb */}
-                                    <div className="w-4 h-4 bg-white rounded-full shadow-lg absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 border-2 border-cyan-500 group-hover:scale-110 transition-transform cursor-grab"></div>
-                                </div>
-                                <span className="text-cyan-400 font-mono text-xs font-bold tabular-nums bg-zinc-900/60 px-2 py-1 rounded border border-zinc-700/30">0.0 dB</span>
+                                <Knob
+                                    value={(mainTrim + 60) / 72 * 100}
+                                    onChange={(v) => setMainTrim((v / 100 * 72) - 60)}
+                                    size={48}
+                                    color={themeColor}
+                                />
+                                <span className="text-cyan-400 font-mono text-xs font-bold tabular-nums bg-zinc-900/60 px-2 py-1 rounded border border-zinc-700/30">
+                                    {mainTrim > 0 ? '+' : ''}{mainTrim.toFixed(1)} dB
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -548,6 +532,8 @@ export const SourceConfigEditor: React.FC<SourceConfigEditorProps> = ({ source, 
                             variant="editor"
                             themeColor={themeColor}
                             highlightedId={selectedChannelId}
+                            disableInternalSelection={true}
+                            activeSpeakerIds={channelConfig.filter(ch => ch.solo).map(ch => ch.speaker)}
                         />
 
                         {/* Corner Accents - Dynamic Theme Color with Hover Enhancement */}

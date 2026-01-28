@@ -8,6 +8,7 @@ interface KnobProps {
   color?: string;
   min?: number;
   max?: number;
+  inactive?: boolean; // 非激活状态：暗色、无发光
 }
 
 export const Knob: React.FC<KnobProps> = ({
@@ -17,8 +18,11 @@ export const Knob: React.FC<KnobProps> = ({
   label,
   color = '#22d3ee', // cyan-400
   min = -96,
-  max = 12
+  max = 12,
+  inactive = false
 }) => {
+  // 非激活状态使用暗色
+  const displayColor = inactive ? '#3f3f46' : color;
   // Visual calculation
   const percentage = Math.min(100, Math.max(0, value));
 
@@ -100,13 +104,14 @@ export const Knob: React.FC<KnobProps> = ({
           <path
             d="M 20,80 A 42,42 0 1 1 80,80"
             fill="none"
-            stroke={color}
+            stroke={displayColor}
             strokeWidth="8"
             strokeDasharray={`${pathLength} ${circumference}`}
             strokeDashoffset={dashOffset}
             className="transition-all duration-75"
             strokeLinecap="round"
-            filter="url(#glow)"
+            filter={inactive ? undefined : "url(#glow)"}
+            opacity={inactive ? 0.5 : 1}
           />
           <defs>
             <filter id="glow">

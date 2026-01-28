@@ -14,6 +14,8 @@ interface VisualizerProps {
     variant?: 'default' | 'editor'; // Controls UI layout
     themeColor?: string; // Dynamic theme color (HEX)
     highlightedId?: string | null; // External highlight control
+    activeSpeakerIds?: string[]; // External control for "Active/Solo" visual state
+    disableInternalSelection?: boolean; // If true, internal selection state is ignored (logic handled externally)
 }
 
 // Speaker Group Definitions
@@ -35,7 +37,7 @@ interface FadingBox {
     height: number;
 }
 
-export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, context = 'SOURCE', onContextChange, formatLabel = '9.1.6', speakerOverrides, onSpeakerClick, onCleanAll, variant = 'default', themeColor = '#06b6d4', highlightedId }) => {
+export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, context = 'SOURCE', onContextChange, formatLabel = '9.1.6', speakerOverrides, onSpeakerClick, onCleanAll, variant = 'default', themeColor = '#06b6d4', highlightedId, activeSpeakerIds, disableInternalSelection = false }) => {
     const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
     const [individualSelection, setIndividualSelection] = useState<string[]>([]);
     const [interactionMode, setInteractionMode] = useState<'SOLO' | 'MUTE'>('SOLO');
@@ -48,6 +50,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
     const [pendingSelection, setPendingSelection] = useState<string[]>([]); // Items currently in box but not confirmed
     const [selectionProgress, setSelectionProgress] = useState(0); // 0 to 1
     const [isSelectionLocked, setIsSelectionLocked] = useState(false); // True once 1s passes and items are added
+    const [animationKey, setAnimationKey] = useState(0); // 用于控制 CSS 动画重启
 
     // Refs for Animation Loop (To avoid re-triggering effects on state change)
     const pendingSelectionRef = useRef<string[]>([]);
@@ -81,8 +84,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
         return () => observer.disconnect();
     }, []);
 
+    // 追踪上一次 pending 长度，用于检测从 0 -> 非0 的变化
+    const prevPendingLengthRef = useRef(0);
+
     // Sync Refs with State
     useEffect(() => {
+        // 当从无待选变为有待选时，重置动画 key
+        if (prevPendingLengthRef.current === 0 && pendingSelection.length > 0) {
+            setAnimationKey(k => k + 1);
+        }
+        prevPendingLengthRef.current = pendingSelection.length;
         pendingSelectionRef.current = pendingSelection;
     }, [pendingSelection]);
 
@@ -212,12 +223,11 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
             const spkPxY = (percentY / 100) * rect.height;
 
             // 3D Transform Compensation: Precision Mode
-            // Reduced tolerances to prevent accidental selection (mis-touch)
-            const baseTolerance = 6;
+            // 缩小碰撞容差以便精准框选
+            const baseTolerance = 2;
 
-            // Height speakers visually shift slightly, so we add a small, focused buffer
-            // barely larger than the visual badge itself
-            const perspectiveBonus = spk.z > 0 ? 12 : 0;
+            // Height speakers visually shift slightly, so we add a small buffer
+            const perspectiveBonus = spk.z > 0 ? 4 : 0;
 
             const hitTolerance = baseTolerance + perspectiveBonus;
 
@@ -418,12 +428,12 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                         </div>
                     )}
 
-                    {/* Progress Bar (Attached to bottom of box) */}
+                    {/* Progress Bar (Attached to bottom of box) - 纯 CSS 动画 */}
                     {!isSelectionLocked && pendingSelection.length > 0 && (
                         <div className="absolute bottom-[-6px] left-0 w-full h-[4px] bg-[#1a1b1f] rounded-full overflow-hidden shadow-sm">
                             <div
-                                className={`h-full ${interactionMode === 'SOLO' ? 'bg-[#2eb8cc]' : 'bg-[#dc2626]'} will-change-[width]`}
-                                style={{ width: `${selectionProgress * 100}%` }}
+                                key={animationKey}
+                                className={`h-full ${interactionMode === 'SOLO' ? 'bg-[#2eb8cc]' : 'bg-[#dc2626]'} origin-left animate-[progressFill_1s_linear_forwards]`}
                             ></div>
                         </div>
                     )}
@@ -486,11 +496,11 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                     className="absolute top-12 left-1/2 -translate-x-1/2 z-30 pointer-events-auto select-none"
                     style={{ transform: `translateX(-50%) scale(${uiScale})`, transformOrigin: 'top center' }}
                 >
-                    <div className="relative flex bg-[#0a0b0e]/60 backdrop-blur-md rounded-lg border border-[#2a2b30]/80 p-[4px] shadow-2xl w-[240px] h-[44px]">
+                    <div className="relative flex bg-[#0a0b0e]/50 backdrop-blur-md rounded-lg border border-white/[0.06] p-[3px] shadow-xl w-[200px] h-[36px]">
                         {/* The Sliding Highlight */}
                         <div
-                            className={`absolute top-[4px] bottom-[4px] w-[calc(50%-4px)] rounded bg-[#151619] border border-[#3f3f46]/50 shadow-[0_2px_10px_rgba(0,0,0,0.4)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] z-0
-                            ${context === 'SOURCE' ? 'left-[4px]' : 'left-[calc(50%)]'}
+                            className={`absolute top-[3px] bottom-[3px] w-[calc(50%-3px)] rounded bg-[#151619] border border-[#3f3f46]/40 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] z-0
+                            ${context === 'SOURCE' ? 'left-[3px]' : 'left-[calc(50%)]'}
                             `}
                         >
                             {/* Optional Glow based on selection */}
@@ -499,7 +509,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
 
                         <button
                             className={`
-                                flex-1 relative z-10 flex items-center justify-center text-xs font-bold uppercase tracking-widest transition-colors duration-200
+                                flex-1 relative z-10 flex items-center justify-center text-[11px] font-bold uppercase tracking-widest transition-colors duration-200
                                 ${context === 'SOURCE' ? 'text-[#0fa070]' : 'text-[#71717a] hover:text-[#a1a1aa]'}
                             `}
                             onClick={() => onContextChange && onContextChange('SOURCE')}
@@ -509,7 +519,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
 
                         <button
                             className={`
-                                flex-1 relative z-10 flex items-center justify-center text-xs font-bold uppercase tracking-widest transition-colors duration-200
+                                flex-1 relative z-10 flex items-center justify-center text-[11px] font-bold uppercase tracking-widest transition-colors duration-200
                                 ${context === 'OUTPUT' ? 'text-[#818cf8]' : 'text-[#71717a] hover:text-[#a1a1aa]'}
                             `}
                             onClick={() => onContextChange && onContextChange('OUTPUT')}
@@ -645,18 +655,18 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                         </div>
                     </div>
                     {/* Main Toolbar (Capsule) - Relative Z-20 to sit on top */}
-                    <div className="relative z-20 flex items-center gap-5 pointer-events-auto bg-[#0a0b0e]/90 backdrop-blur-2xl border border-white/[0.08] rounded-full px-6 py-2.5 shadow-2xl shadow-black/70 select-none">
+                    <div className="relative z-20 flex items-center gap-3 pointer-events-auto bg-[#0a0b0e]/85 backdrop-blur-2xl border border-white/[0.06] rounded-full px-4 py-2 shadow-xl shadow-black/50 select-none">
 
                         {/* Solo/Mute Segmented Control */}
-                        <div className="flex bg-white/[0.04] rounded-full p-1 relative items-center">
+                        <div className="flex bg-white/[0.04] rounded-full p-0.5 relative items-center">
                             {['SOLO', 'MUTE'].map((m) => (
                                 <button
                                     key={m}
                                     onClick={(e) => { e.stopPropagation(); setInteractionMode(m as 'SOLO' | 'MUTE'); }}
                                     className={`
-                                        relative z-10 px-6 py-1.5 text-xs font-bold uppercase tracking-widest rounded-full transition-all duration-300 flex items-center justify-center
+                                        relative z-10 px-4 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full transition-all duration-300 flex items-center justify-center
                                         ${interactionMode === m
-                                            ? (m === 'SOLO' ? 'text-[#2eb8cc] bg-[#1a8a9c]/30 shadow-[0_0_12px_rgba(46,184,204,0.15)]' : 'text-[#dc2626] bg-[#b91c1c]/30 shadow-[0_0_12px_rgba(220,38,38,0.15)]')
+                                            ? (m === 'SOLO' ? 'text-[#2eb8cc] bg-[#1a8a9c]/30 shadow-[0_0_10px_rgba(46,184,204,0.12)]' : 'text-[#dc2626] bg-[#b91c1c]/30 shadow-[0_0_10px_rgba(220,38,38,0.12)]')
                                             : 'text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]'
                                         }
                                     `}
@@ -666,10 +676,10 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             ))}
                         </div>
 
-                        <div className="w-px h-6 bg-white/[0.08]"></div>
+                        <div className="w-px h-5 bg-white/[0.06]"></div>
 
                         {/* Speaker Groups */}
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5">
                             {Object.keys(GROUPS).map(g => {
                                 const active = selectedGroup === g;
                                 const hasSpk = speakers.some(s => GROUPS[g].includes(s.id));
@@ -679,11 +689,11 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                                         disabled={!hasSpk}
                                         onClick={(e) => { e.stopPropagation(); if (hasSpk) { if (active) { setSelectedGroup(null); setIndividualSelection([]); } else { setSelectedGroup(g); setIndividualSelection(GROUPS[g]); } } }}
                                         className={`
-                                            px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all
+                                            px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all
                                             ${!hasSpk
                                                 ? 'opacity-20 hidden'
                                                 : active
-                                                    ? 'text-[#e4e4e7] bg-white/[0.08] shadow-inner ring-1 ring-white/[0.08] translate-y-[1px]'
+                                                    ? 'text-[#e4e4e7] bg-white/[0.08] shadow-inner ring-1 ring-white/[0.06]'
                                                     : 'text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]'
                                             }
                                         `}
@@ -695,7 +705,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                         </div>
 
                         {/* Clean Button (Permanent) */}
-                        <div className="w-px h-6 bg-white/[0.08]"></div>
+                        <div className="w-px h-5 bg-white/[0.06]"></div>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -707,20 +717,21 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             }}
                             disabled={!isSelectionActive}
                             className={`
-                                flex items-center gap-2 px-2 transition-all group
+                                flex items-center gap-1.5 px-2 transition-all group
                                 ${isSelectionActive
-                                    ? 'text-[#dc2626] cursor-pointer drop-shadow-[0_0_8px_rgba(220,38,38,0.4)]'
+                                    ? 'text-[#dc2626] cursor-pointer drop-shadow-[0_0_6px_rgba(220,38,38,0.3)]'
                                     : 'text-[#71717a] cursor-not-allowed opacity-50'
                                 }
                             `}
                             title="Clear Selection"
                         >
-                            <RotateCw size={14} className={`transition-transform duration-500 ${isSelectionActive ? 'group-hover:rotate-180 text-[#dc2626]' : ''}`} />
-                            <span className="text-xs font-bold tracking-widest uppercase">CLEAN</span>
+                            <RotateCw size={12} className={`transition-transform duration-500 ${isSelectionActive ? 'group-hover:rotate-180 text-[#dc2626]' : ''}`} />
+                            <span className="text-[10px] font-bold tracking-wider uppercase">CLEAN</span>
                         </button>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* SCALABLE CONTENT LAYER */}
             <div className="flex-1 flex items-center justify-center relative overflow-hidden pointer-events-none">
@@ -769,7 +780,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             const top = ((spk.y + 1) / 2) * (100 - PADDING * 2) + PADDING;
 
                             const state = getSpeakerState(spk.id);
-                            const isActive = state === 'active';
+                            const isActive = state === 'active' || (activeSpeakerIds?.includes(spk.id) || false);
                             // Hybrid State Support: Highlighted is now independent of State (Solo/Active)
                             const isHighlighted = spk.id === highlightedId;
                             const isMuted = state === 'muted';
@@ -777,29 +788,29 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             const isPending = isSpeakerPending(spk.id);
                             const isHeight = spk.z > 0;
 
-                            // 1. Base Theme (Default/Zinc)
+                            // 1. Base Theme (Default/Zinc) - 高饱和度荧光
                             let theme = {
-                                text: 'text-white font-bold', // Maximum Brightness
-                                border: 'border-zinc-500/80',
-                                bg: 'bg-zinc-900/40',
-                                shadow: 'shadow-[0_0_15px_rgba(255,255,255,0.05)]',
+                                text: 'text-zinc-400/80 font-medium',
+                                border: 'border-zinc-600/30',
+                                bg: 'bg-zinc-900/15',
+                                shadow: 'shadow-[0_0_8px_rgba(255,255,255,0.05)]',
                                 activeText: 'text-white font-extrabold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]',
                                 activeBorder: 'border-white',
-                                activeBg: 'bg-white/20',
-                                activeShadow: 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_20px_rgba(255,255,255,0.4)]',
+                                activeBg: 'bg-white/30',
+                                activeShadow: 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_30px_rgba(255,255,255,0.6)]',
                                 glowColor: 'bg-zinc-500',
-                                // Highlighted Theme (EDIT FOCUS - Cyan/Sky)
-                                highlightedText: 'text-cyan-300 font-extrabold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]',
-                                highlightedBorder: 'border-cyan-400',
-                                highlightedBg: 'bg-cyan-500/20',
-                                highlightedShadow: 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_30px_rgba(34,211,238,0.6),inset_0_0_20px_rgba(34,211,238,0.3)]',
+                                // Highlighted Theme (EDIT FOCUS - Cyan/Sky) - 高饱和度
+                                highlightedText: 'text-[#00d4ff] font-extrabold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]',
+                                highlightedBorder: 'border-[#00d4ff]',
+                                highlightedBg: 'bg-[#00d4ff]/30',
+                                highlightedShadow: 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_35px_rgba(0,212,255,0.8),inset_0_0_25px_rgba(0,212,255,0.5)]',
                                 // Mute Theme
-                                mutedText: 'text-red-500',
-                                mutedBorder: 'border-red-600',
-                                mutedBg: 'bg-red-950/80',
-                                mutedShadow: 'shadow-[0_0_15px_rgba(239,68,68,0.2)]',
-                                hoverBorder: 'group-hover:border-zinc-500/50',
-                                hoverBg: 'group-hover:bg-zinc-800/30'
+                                mutedText: 'text-[#ff3b3b]',
+                                mutedBorder: 'border-[#ff3b3b]',
+                                mutedBg: 'bg-[#ff3b3b]/20',
+                                mutedShadow: 'shadow-[0_0_18px_rgba(255,59,59,0.4)]',
+                                hoverBorder: 'group-hover:border-zinc-500/40',
+                                hoverBg: 'group-hover:bg-zinc-900/25'
                             };
 
                             // 2. Group Overrides (Color Coding)
@@ -810,56 +821,56 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             else if (GROUPS['Sub'].includes(spk.id)) baseColor = 'purple';
                             else if (isHeight) baseColor = 'sky';
 
-                            // Apply Base Theme based on Group
+                            // Apply Base Theme based on Group - 高饱和度荧光 + 增强激活态边框
                             if (baseColor === 'rose') {
                                 theme.glowColor = 'bg-rose-500';
-                                theme.text = 'text-rose-100 font-bold'; // BRIGHTENED from 300
-                                theme.border = 'border-rose-600/80';
-                                theme.bg = 'bg-rose-950/50';
-                                theme.shadow = 'shadow-[0_0_12px_rgba(251,113,133,0.15)]';
+                                theme.text = 'text-rose-300/80 font-medium';
+                                theme.border = 'border-rose-600/40';
+                                theme.bg = 'bg-rose-950/20';
+                                theme.shadow = 'shadow-[0_0_8px_rgba(255,107,138,0.1)]';
                                 theme.activeText = 'text-rose-50 font-extrabold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]';
-                                theme.activeBorder = 'border-rose-400';
-                                theme.activeBg = 'bg-rose-500/20';
-                                theme.activeShadow = 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_30px_rgba(251,113,133,0.6),inset_0_0_20px_rgba(251,113,133,0.3)]';
-                                theme.hoverBorder = 'group-hover:border-rose-500/60';
-                                theme.hoverBg = 'group-hover:bg-rose-900/40';
+                                theme.activeBorder = 'border-[#ff6b8a]';
+                                theme.activeBg = 'bg-[#ff6b8a]/35';
+                                theme.activeShadow = 'shadow-[0_0_40px_rgba(255,107,138,0.9),inset_0_0_20px_rgba(255,107,138,0.4)]';
+                                theme.hoverBorder = 'group-hover:border-rose-500/50';
+                                theme.hoverBg = 'group-hover:bg-rose-950/30';
                             } else if (baseColor === 'purple') {
                                 theme.glowColor = 'bg-purple-500';
-                                theme.text = 'text-purple-100 font-bold'; // BRIGHTENED from 300
-                                theme.border = 'border-purple-600/80';
-                                theme.bg = 'bg-purple-950/50';
-                                theme.shadow = 'shadow-[0_0_12px_rgba(192,132,252,0.15)]';
+                                theme.text = 'text-purple-300/80 font-medium';
+                                theme.border = 'border-purple-600/40';
+                                theme.bg = 'bg-purple-950/20';
+                                theme.shadow = 'shadow-[0_0_8px_rgba(191,95,255,0.1)]';
                                 theme.activeText = 'text-purple-50 font-extrabold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]';
-                                theme.activeBorder = 'border-purple-400';
-                                theme.activeBg = 'bg-purple-500/20';
-                                theme.activeShadow = 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_30px_rgba(192,132,252,0.6),inset_0_0_20px_rgba(192,132,252,0.3)]';
-                                theme.hoverBorder = 'group-hover:border-purple-500/60';
-                                theme.hoverBg = 'group-hover:bg-purple-900/40';
+                                theme.activeBorder = 'border-[#bf5fff]';
+                                theme.activeBg = 'bg-[#bf5fff]/35';
+                                theme.activeShadow = 'shadow-[0_0_40px_rgba(191,95,255,0.9),inset_0_0_20px_rgba(191,95,255,0.4)]';
+                                theme.hoverBorder = 'group-hover:border-purple-500/50';
+                                theme.hoverBg = 'group-hover:bg-purple-950/30';
                             } else if (baseColor === 'sky') {
                                 theme.glowColor = 'bg-sky-500';
-                                theme.text = 'text-sky-100 font-bold'; // BRIGHTENED from 300
-                                theme.border = 'border-sky-600/80';
-                                theme.bg = 'bg-sky-950/50';
-                                theme.shadow = 'shadow-[0_0_12px_rgba(56,189,248,0.15)]';
+                                theme.text = 'text-sky-300/80 font-medium';
+                                theme.border = 'border-sky-600/40';
+                                theme.bg = 'bg-sky-950/20';
+                                theme.shadow = 'shadow-[0_0_8px_rgba(0,200,255,0.1)]';
                                 theme.activeText = 'text-sky-50 font-extrabold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]';
-                                theme.activeBorder = 'border-sky-400';
-                                theme.activeBg = 'bg-sky-500/20';
-                                theme.activeShadow = 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_30px_rgba(56,189,248,0.6),inset_0_0_20px_rgba(56,189,248,0.3)]';
-                                theme.hoverBorder = 'group-hover:border-sky-500/60';
-                                theme.hoverBg = 'group-hover:bg-sky-900/40';
+                                theme.activeBorder = 'border-[#00c8ff]';
+                                theme.activeBg = 'bg-[#00c8ff]/35';
+                                theme.activeShadow = 'shadow-[0_0_40px_rgba(0,200,255,0.9),inset_0_0_20px_rgba(0,200,255,0.4)]';
+                                theme.hoverBorder = 'group-hover:border-sky-500/50';
+                                theme.hoverBg = 'group-hover:bg-sky-950/30';
                             } else {
                                 // Emerald (Surrounds)
                                 theme.glowColor = 'bg-emerald-500';
-                                theme.text = 'text-emerald-100 font-bold'; // BRIGHTENED from 300
-                                theme.border = 'border-emerald-600/80';
-                                theme.bg = 'bg-emerald-950/50';
-                                theme.shadow = 'shadow-[0_0_12px_rgba(52,211,153,0.15)]';
+                                theme.text = 'text-emerald-300/80 font-medium';
+                                theme.border = 'border-emerald-600/40';
+                                theme.bg = 'bg-emerald-950/20';
+                                theme.shadow = 'shadow-[0_0_8px_rgba(0,232,144,0.1)]';
                                 theme.activeText = 'text-emerald-50 font-extrabold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]';
-                                theme.activeBorder = 'border-emerald-400';
-                                theme.activeBg = 'bg-emerald-500/20';
-                                theme.activeShadow = 'shadow-[0_25px_50px_-12px_rgba(0,0,0,0.9),0_0_30px_rgba(52,211,153,0.6),inset_0_0_20px_rgba(52,211,153,0.3)]';
-                                theme.hoverBorder = 'group-hover:border-emerald-500/60';
-                                theme.hoverBg = 'group-hover:bg-emerald-900/40';
+                                theme.activeBorder = 'border-[#00e890]';
+                                theme.activeBg = 'bg-[#00e890]/35';
+                                theme.activeShadow = 'shadow-[0_0_40px_rgba(0,232,144,0.9),inset_0_0_20px_rgba(0,232,144,0.4)]';
+                                theme.hoverBorder = 'group-hover:border-emerald-500/50';
+                                theme.hoverBg = 'group-hover:bg-emerald-950/30';
                             }
 
                             // 3. Dynamic Overrides (from props)
@@ -876,56 +887,77 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             let finalRing = '';
                             let finalOpacity = 'opacity-100';
 
-                            // EXPLICIT COLOR MAPS for Tailwind JIT
+                            // EXPLICIT COLOR MAPS for Tailwind JIT - 高饱和度荧光
                             const COLOR_MAPS: Record<string, any> = {
                                 rose: {
                                     text: 'text-rose-300', activeText: 'text-rose-50',
-                                    border: 'border-rose-400', dimBorder: 'border-rose-900/50',
-                                    bg: 'bg-rose-500/50', dimBg: 'bg-rose-950/60', // 50-60% Opacity
-                                    shadow: 'shadow-[0_0_15px_rgba(251,113,133,0.3)]',
-                                    ring: 'ring-rose-400'
+                                    border: 'border-[#ff6b8a]',
+                                    dimBorder: 'border-rose-700/40', dimBg: 'bg-rose-950/40', dimText: 'text-rose-400/70',
+                                    dimShadow: 'shadow-[0_0_6px_rgba(255,107,138,0.15)]',
+                                    bg: 'bg-[#ff6b8a]/50',
+                                    shadow: 'shadow-[0_0_18px_rgba(255,107,138,0.4)]',
+                                    ring: 'ring-[#ff6b8a]',
+                                    // 高亮状态 - 高饱和度
+                                    highlightText: 'text-rose-100 font-bold',
+                                    highlightBorder: 'border-[#ff6b8a]',
+                                    highlightBg: 'bg-[#ff6b8a]/40',
+                                    highlightShadow: 'shadow-[0_0_28px_rgba(255,107,138,0.65)]'
                                 },
                                 purple: {
                                     text: 'text-purple-300', activeText: 'text-purple-50',
-                                    border: 'border-purple-400', dimBorder: 'border-purple-900/50',
-                                    bg: 'bg-purple-500/50', dimBg: 'bg-purple-950/60',
-                                    shadow: 'shadow-[0_0_15px_rgba(192,132,252,0.3)]',
-                                    ring: 'ring-purple-400'
+                                    border: 'border-[#bf5fff]',
+                                    dimBorder: 'border-purple-700/40', dimBg: 'bg-purple-950/40', dimText: 'text-purple-400/70',
+                                    dimShadow: 'shadow-[0_0_6px_rgba(191,95,255,0.15)]',
+                                    bg: 'bg-[#bf5fff]/50',
+                                    shadow: 'shadow-[0_0_18px_rgba(191,95,255,0.4)]',
+                                    ring: 'ring-[#bf5fff]',
+                                    highlightText: 'text-purple-100 font-bold',
+                                    highlightBorder: 'border-[#bf5fff]',
+                                    highlightBg: 'bg-[#bf5fff]/40',
+                                    highlightShadow: 'shadow-[0_0_28px_rgba(191,95,255,0.65)]'
                                 },
                                 sky: {
                                     text: 'text-sky-300', activeText: 'text-sky-50',
-                                    border: 'border-sky-400', dimBorder: 'border-sky-900/50',
-                                    bg: 'bg-sky-500/50', dimBg: 'bg-sky-950/60',
-                                    shadow: 'shadow-[0_0_15px_rgba(56,189,248,0.3)]',
-                                    ring: 'ring-sky-400'
+                                    border: 'border-[#00c8ff]',
+                                    dimBorder: 'border-sky-700/40', dimBg: 'bg-sky-950/40', dimText: 'text-sky-400/70',
+                                    dimShadow: 'shadow-[0_0_6px_rgba(0,200,255,0.15)]',
+                                    bg: 'bg-[#00c8ff]/50',
+                                    shadow: 'shadow-[0_0_18px_rgba(0,200,255,0.4)]',
+                                    ring: 'ring-[#00c8ff]',
+                                    highlightText: 'text-sky-100 font-bold',
+                                    highlightBorder: 'border-[#00c8ff]',
+                                    highlightBg: 'bg-[#00c8ff]/40',
+                                    highlightShadow: 'shadow-[0_0_28px_rgba(0,200,255,0.65)]'
                                 },
                                 emerald: {
                                     text: 'text-emerald-300', activeText: 'text-emerald-50',
-                                    border: 'border-emerald-400', dimBorder: 'border-emerald-900/50',
-                                    bg: 'bg-emerald-500/50', dimBg: 'bg-emerald-950/60',
-                                    shadow: 'shadow-[0_0_15px_rgba(52,211,153,0.3)]',
-                                    ring: 'ring-emerald-400'
+                                    border: 'border-[#00e890]',
+                                    dimBorder: 'border-emerald-700/40', dimBg: 'bg-emerald-950/40', dimText: 'text-emerald-400/70',
+                                    dimShadow: 'shadow-[0_0_6px_rgba(0,232,144,0.15)]',
+                                    bg: 'bg-[#00e890]/50',
+                                    shadow: 'shadow-[0_0_18px_rgba(0,232,144,0.4)]',
+                                    ring: 'ring-[#00e890]',
+                                    highlightText: 'text-emerald-100 font-bold',
+                                    highlightBorder: 'border-[#00e890]',
+                                    highlightBg: 'bg-[#00e890]/40',
+                                    highlightShadow: 'shadow-[0_0_28px_rgba(0,232,144,0.65)]'
                                 }
                             };
 
                             const colors = COLOR_MAPS[baseColor] || COLOR_MAPS['emerald'];
 
                             if (isActive) {
-                                // SOLO/ACTIVE: Use Group Theme
-                                finalText = theme.activeText; // Already set correctly in block above
+                                // SOLO/ACTIVE: Use Group Theme - 增强边框可见度
+                                finalText = theme.activeText;
                                 finalBorder = theme.activeBorder;
-                                finalBg = colors.bg; // USE EXPLICIT BG
+                                finalBg = colors.bg;
                                 finalShadow = theme.activeShadow;
-
-                                // Explicitly ensuring border width and style for active state
-                                if (!finalBorder.includes('border-2')) finalBorder += ' border-2';
                             } else if (isHighlighted) {
-                                // EDIT FOCUS ONLY (No Solo):
-                                // Use Group Color for Border/Text instead of Cyan
-                                finalText = `${colors.text} font-bold`;
-                                finalBorder = colors.border;
-                                finalBg = colors.dimBg; // Use darker bg
-                                finalShadow = colors.shadow;
+                                // EDIT FOCUS: 更亮的高亮效果，接近激活状态
+                                finalText = colors.highlightText;
+                                finalBorder = colors.highlightBorder;
+                                finalBg = colors.highlightBg;
+                                finalShadow = colors.highlightShadow;
                             } else if (isMuted) {
                                 finalText = theme.mutedText;
                                 finalBorder = theme.mutedBorder;
@@ -934,25 +966,32 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                                 finalOpacity = 'opacity-50';
                             } else if (isPending) {
                                 const isMutePending = interactionMode === 'MUTE';
-                                finalBorder = `border-2 border-dashed ${isMutePending ? '' : 'border-white/60'}`;
-                                finalBg = isMutePending ? 'bg-red-900/20' : 'bg-white/5';
+                                // 使用主题色而非白色
+                                finalBorder = isMutePending ? 'border-red-500/60' : 'border-cyan-500/60';
+                                finalBg = isMutePending ? 'bg-red-900/20' : 'bg-cyan-900/20';
                                 finalText = isMutePending ? 'text-red-400' : theme.text;
-                                finalShadow = 'shadow-[0_0_10px_rgba(255,255,255,0.2)]';
+                                finalShadow = isMutePending ? 'shadow-[0_0_12px_rgba(239,68,68,0.2)]' : 'shadow-[0_0_12px_rgba(6,182,212,0.2)]';
                             } else if (isDimmed) {
-                                // DIMMED: Keep original color identity but fade it
-                                // UPDATED: Full Opacity (1.0) but with semi-transparent background color
-                                finalText = 'text-zinc-300'; // Brightened further from 400
+                                // DIMMED: Keep original color identity with higher saturation
+                                // 保留原色系但降低亮度，增加饱和度
+                                finalText = colors.dimText;
                                 finalBorder = colors.dimBorder;
                                 finalBg = colors.dimBg;
-                                finalShadow = 'none';
-                                finalOpacity = 'opacity-100'; // NO TRANSPARENCY on element, controlled by bg color
+                                finalShadow = colors.dimShadow;
+                                finalOpacity = 'opacity-100';
                             }
 
                             // OVERLAY RING: Applied INDEPENDENTLY if Highlighted
                             // This allows Hybrid State: Solo (Glow) + Highlight (Ring)
                             if (isHighlighted) {
-                                // Dynamic Ring Color matches Group
-                                finalRing = `ring-2 ${colors.ring} ring-offset-2 ring-offset-black/50`;
+                                // EDIT FOCUS: Force Cyan Ring for high contrast against Solo colors
+                                finalRing = `ring-2 ring-cyan-400 ring-offset-2 ring-offset-black/50 shadow-[0_0_10px_rgba(34,211,238,0.6)]`;
+
+                                // If ALSO active (Solo), ensure text is purely white (already handled by Active Theme)
+                                // But maybe add a border override?
+                                if (isActive) {
+                                    finalBorder = 'border-cyan-200'; // Make border lighter to match ring
+                                }
                             }
 
                             // 5. Geometry & Z-Depth
@@ -960,28 +999,37 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             // Outer Container Size (Hitbox)
                             const sizeClass = isHeight ? 'w-20 h-24' : 'w-16 h-20';
 
-                            // Scale Logic
+                            // Scale Logic - 更平滑的缩放
                             const baseScale = 1;
-                            const activeScale = (isActive || isHighlighted) ? 1.15 : (isPending ? 1.05 : (isDimmed || isMuted ? 0.95 : 1));
+                            const activeScale = (isActive || isHighlighted) ? 1.08 : (isPending ? 1.03 : (isDimmed || isMuted ? 0.97 : 1));
                             const totalScale = baseScale * activeScale;
 
                             // Badge Class (The visual box)
                             // RESTORED DIMENSIONS: w-14 h-10 (standard), w-12 h-14 (heights potential modification if needed, but keeping consistent for now)
+                            // 根据状态动态设置边框宽度
+                            const borderWidth = isActive ? 'border-[2.5px]' : (isHighlighted ? 'border-2' : (isPending ? 'border-2 border-dashed' : 'border-[1.5px]'));
                             const badgeClass = `
-                                w-14 h-10 rounded border-[1.5px] flex items-center justify-center backdrop-blur-sm transition-all duration-300 relative overflow-visible pointer-events-none
+                                w-14 h-10 rounded flex items-center justify-center backdrop-blur-sm relative overflow-visible pointer-events-none
+                                ${borderWidth}
                                 ${finalText} ${finalBorder} ${finalBg} ${finalShadow} ${finalRing} ${finalOpacity}
-                                ${(!isActive && !isHighlighted && !isMuted && !isDimmed) ? `${theme.hoverBorder} ${theme.hoverBg} group-hover:scale-105` : ''}
+                                ${(!isActive && !isHighlighted && !isMuted && !isDimmed && !isPending) ? `${theme.hoverBorder} ${theme.hoverBg} group-hover:scale-[1.02]` : ''}
                             `;
+
+                            // 内联过渡样式 - 更精确控制
+                            const badgeTransition = {
+                                transition: 'background-color 0.5s ease-out, border-color 0.5s ease-out, box-shadow 0.5s ease-out, transform 0.5s ease-out, opacity 0.5s ease-out'
+                            };
 
                             return (
                                 <div
                                     key={spk.id}
-                                    className={`absolute ${sizeClass} flex flex-col items-center justify-center group transform-gpu cursor-pointer transition-all duration-500 ease-out ${isActive || isHighlighted || isPending ? 'z-20' : 'z-10'} select-none`}
+                                    className={`absolute ${sizeClass} flex flex-col items-center justify-center group transform-gpu cursor-pointer ${isHighlighted ? 'z-30' : (isActive || isPending ? 'z-20' : 'z-10')} select-none`}
                                     style={{
                                         left: `${left}%`,
                                         top: `${top}%`,
                                         transform: `translate(-50%, -50%) translateZ(${zDepth}px) scale(${totalScale})`,
-                                        transformStyle: 'preserve-3d'
+                                        transformStyle: 'preserve-3d',
+                                        transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), z-index 0s'
                                     }}
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
@@ -990,21 +1038,23 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
 
                                         // Standard Selection Logic (Visualizer Internal)
                                         // Restored to allow Solo/Mute state to be tracked visually
-                                        const isMultiSelect = e.metaKey || e.ctrlKey;
-                                        if (selectedGroup) {
-                                            setSelectedGroup(null);
-                                            setIndividualSelection([spk.id]);
-                                        } else {
-                                            setIndividualSelection(prev =>
-                                                prev.includes(spk.id) ? prev.filter(id => id !== spk.id) : [...prev, spk.id]
-                                            );
+                                        if (!disableInternalSelection) {
+                                            const isMultiSelect = e.metaKey || e.ctrlKey;
+                                            if (selectedGroup) {
+                                                setSelectedGroup(null);
+                                                setIndividualSelection([spk.id]);
+                                            } else {
+                                                setIndividualSelection(prev =>
+                                                    prev.includes(spk.id) ? prev.filter(id => id !== spk.id) : [...prev, spk.id]
+                                                );
+                                            }
                                         }
                                     }}
                                 >
                                     {/* Height Shadow */}
                                     {isHeight && (
                                         <div
-                                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none transition-all duration-500"
+                                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none transition-all duration-700 ease-out"
                                             style={{
                                                 width: `${100 + spk.z * 40}%`,
                                                 height: `${100 + spk.z * 40}%`,
@@ -1067,7 +1117,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                                     )}
 
                                     {/* Speaker Badge/Icon Container */}
-                                    <div className={badgeClass}>
+                                    <div className={badgeClass} style={badgeTransition}>
                                         <span className="text-xs font-bold font-mono">{spk.index}</span>
                                     </div>
 

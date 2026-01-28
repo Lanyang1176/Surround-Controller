@@ -15,6 +15,8 @@ Persistence (Master + Overrides pattern):
 """
 
 import argparse
+import sys
+import io
 from core import CSV_CONFIG, AVAILABLE_STACKS, MAX_RESULTS, search, search_stack
 from design_system import generate_design_system, persist_design_system
 
@@ -46,6 +48,13 @@ def format_output(result):
 
 
 if __name__ == "__main__":
+    # Force UTF-8 output for Windows terminals
+    if sys.stdout.encoding.lower() != 'utf-8':
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        except AttributeError:
+            pass  # Handle cases where stdout might not have buffer (e.g. some IDLEs)
+
     parser = argparse.ArgumentParser(description="UI Pro Max Search")
     parser.add_argument("query", help="Search query")
     parser.add_argument("--domain", "-d", choices=list(CSV_CONFIG.keys()), help="Search domain")

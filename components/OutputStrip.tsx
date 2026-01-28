@@ -6,7 +6,9 @@ interface OutputStripProps {
   output: Output;
   selected: boolean;
   onSelect: (id: string) => void;
+  onSettingsClick?: () => void;
   isMuted?: boolean;
+  isEditing?: boolean;
 }
 
 const getChannelCount = (format: string) => {
@@ -20,43 +22,43 @@ const getChannelCount = (format: string) => {
   }
 }
 
-// Output Themes - 玻璃态增强版本
+// Output Themes - 玻璃感版本，高对比度：亮边框 + 暗内填充
 const THEMES: Record<string, any> = {
   cyan: {
-    indicatorInactive: 'bg-[#0a2a30]/30 shadow-[0_0_6px_rgba(46,184,204,0.04)]',
-    indicatorActive: 'bg-[#2eb8cc] shadow-[0_0_10px_rgba(46,184,204,0.6)]',
-    btnInactive: 'bg-gradient-to-b from-[#1f2024] to-[#151619] border-[#2a2b30] text-[#52525b] shadow-[0_1px_2px_rgba(0,0,0,0.4)]',
-    btnActive: 'bg-[#2eb8cc] border-[#1a8a9c] text-[#001a1f] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_12px_rgba(46,184,204,0.4)]',
-    meterFill: 'bg-[#2eb8cc]',
-    containerActive: 'border-[#2eb8cc] shadow-[0_0_20px_rgba(46,184,204,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] bg-gradient-to-b from-[#2eb8cc]/15 to-[#2eb8cc]/5 backdrop-blur-sm',
+    indicatorInactive: 'bg-[#0a2a30]/15 shadow-none',
+    indicatorActive: 'bg-[#00d4ff] shadow-[0_0_14px_rgba(0,212,255,0.8)]',
+    btnInactive: 'bg-gradient-to-b from-[#16171a] to-[#0e0f12] border-[#222326] text-[#404048] shadow-[0_1px_3px_rgba(0,0,0,0.6)]',
+    btnActive: 'bg-[#00d4ff] border-[#00a8cc] text-[#001a1f] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_14px_rgba(0,212,255,0.6)]',
+    meterFill: 'bg-[#00d4ff]',
+    containerActive: 'border-[#00d4ff]/60 shadow-[0_0_24px_rgba(0,212,255,0.3),inset_0_1px_0_rgba(255,255,255,0.03)] bg-[#00d4ff]/[0.02]',
   },
   yellow: {
-    indicatorInactive: 'bg-[#2a2a0a]/30 shadow-[0_0_6px_rgba(212,180,21,0.04)]',
-    indicatorActive: 'bg-[#d4b415] shadow-[0_0_10px_rgba(212,180,21,0.6)]',
-    btnInactive: 'bg-gradient-to-b from-[#1f2024] to-[#151619] border-[#2a2b30] text-[#52525b] shadow-[0_1px_2px_rgba(0,0,0,0.4)]',
-    btnActive: 'bg-[#d4b415] border-[#a68f10] text-[#1a1a00] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_12px_rgba(212,180,21,0.4)]',
-    meterFill: 'bg-[#d4b415]',
-    containerActive: 'border-[#d4b415] shadow-[0_0_20px_rgba(212,180,21,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] bg-gradient-to-b from-[#d4b415]/15 to-[#d4b415]/5 backdrop-blur-sm',
+    indicatorInactive: 'bg-[#2a2a0a]/15 shadow-none',
+    indicatorActive: 'bg-[#ffdc00] shadow-[0_0_14px_rgba(255,220,0,0.8)]',
+    btnInactive: 'bg-gradient-to-b from-[#16171a] to-[#0e0f12] border-[#222326] text-[#404048] shadow-[0_1px_3px_rgba(0,0,0,0.6)]',
+    btnActive: 'bg-[#ffdc00] border-[#ccb000] text-[#1a1a00] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_14px_rgba(255,220,0,0.6)]',
+    meterFill: 'bg-[#ffdc00]',
+    containerActive: 'border-[#ffdc00]/60 shadow-[0_0_24px_rgba(255,220,0,0.3),inset_0_1px_0_rgba(255,255,255,0.03)] bg-[#ffdc00]/[0.02]',
   },
   orange: {
-    indicatorInactive: 'bg-[#2a1a0a]/30 shadow-[0_0_6px_rgba(212,120,50,0.04)]',
-    indicatorActive: 'bg-[#d47832] shadow-[0_0_10px_rgba(212,120,50,0.6)]',
-    btnInactive: 'bg-gradient-to-b from-[#1f2024] to-[#151619] border-[#2a2b30] text-[#52525b] shadow-[0_1px_2px_rgba(0,0,0,0.4)]',
-    btnActive: 'bg-[#d47832] border-[#a65e28] text-[#1a0f00] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_12px_rgba(212,120,50,0.4)]',
-    meterFill: 'bg-[#d47832]',
-    containerActive: 'border-[#d47832] shadow-[0_0_20px_rgba(212,120,50,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] bg-gradient-to-b from-[#d47832]/15 to-[#d47832]/5 backdrop-blur-sm',
+    indicatorInactive: 'bg-[#2a1a0a]/15 shadow-none',
+    indicatorActive: 'bg-[#ff8c32] shadow-[0_0_14px_rgba(255,140,50,0.8)]',
+    btnInactive: 'bg-gradient-to-b from-[#16171a] to-[#0e0f12] border-[#222326] text-[#404048] shadow-[0_1px_3px_rgba(0,0,0,0.6)]',
+    btnActive: 'bg-[#ff8c32] border-[#cc7028] text-[#1a0f00] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_14px_rgba(255,140,50,0.6)]',
+    meterFill: 'bg-[#ff8c32]',
+    containerActive: 'border-[#ff8c32]/60 shadow-[0_0_24px_rgba(255,140,50,0.3),inset_0_1px_0_rgba(255,255,255,0.03)] bg-[#ff8c32]/[0.02]',
   },
   lime: {
-    indicatorInactive: 'bg-[#1a2a0a]/30 shadow-[0_0_6px_rgba(140,195,45,0.04)]',
-    indicatorActive: 'bg-[#8cc32d] shadow-[0_0_10px_rgba(140,195,45,0.6)]',
-    btnInactive: 'bg-gradient-to-b from-[#1f2024] to-[#151619] border-[#2a2b30] text-[#52525b] shadow-[0_1px_2px_rgba(0,0,0,0.4)]',
-    btnActive: 'bg-[#8cc32d] border-[#6d9823] text-[#0f1a00] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_12px_rgba(140,195,45,0.4)]',
-    meterFill: 'bg-[#8cc32d]',
-    containerActive: 'border-[#8cc32d] shadow-[0_0_20px_rgba(140,195,45,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] bg-gradient-to-b from-[#8cc32d]/15 to-[#8cc32d]/5 backdrop-blur-sm',
+    indicatorInactive: 'bg-[#1a2a0a]/15 shadow-none',
+    indicatorActive: 'bg-[#b4ff32] shadow-[0_0_14px_rgba(180,255,50,0.8)]',
+    btnInactive: 'bg-gradient-to-b from-[#16171a] to-[#0e0f12] border-[#222326] text-[#404048] shadow-[0_1px_3px_rgba(0,0,0,0.6)]',
+    btnActive: 'bg-[#b4ff32] border-[#90cc28] text-[#0f1a00] shadow-[inset_0_1px_4px_rgba(255,255,255,0.3),0_0_14px_rgba(180,255,50,0.6)]',
+    meterFill: 'bg-[#b4ff32]',
+    containerActive: 'border-[#b4ff32]/60 shadow-[0_0_24px_rgba(180,255,50,0.3),inset_0_1px_0_rgba(255,255,255,0.03)] bg-[#b4ff32]/[0.02]',
   },
 };
 
-export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSelect, isMuted }) => {
+export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSelect, onSettingsClick, isMuted }) => {
   const channelCount = getChannelCount(output.format);
   const theme = THEMES[output.color] || THEMES['cyan'];
 
@@ -91,16 +93,13 @@ export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSe
   return (
     <div
       className={`
-        relative w-full rounded-xl p-1.5 mb-2 transition-all duration-300 ease-out select-none group transform-gpu border
+        relative w-full rounded-xl p-1.5 mb-2 transition-all duration-300 ease-out select-none group transform-gpu border backdrop-blur-md
         ${selected
-          ? `${theme.containerActive} scale-[1.01] shadow-lg`
-          : 'bg-gradient-to-b from-[#141418]/90 to-[#0f1014]/95 backdrop-blur-sm border-white/[0.06] hover:border-white/[0.1] hover:from-[#18181c]/90 hover:to-[#111216]/95'}
+          ? `${theme.containerActive} scale-[1.01] shadow-xl`
+          : 'bg-[#06070a]/85 border-[#252830]/70 hover:border-[#353840]/80 hover:bg-[#08090c]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_8px_24px_-4px_rgba(0,0,0,0.7),0_2px_8px_rgba(0,0,0,0.4)]'}
       `}
       onClick={() => onSelect(output.id)}
     >
-      {/* 顶部高光线 - 玻璃态效果 */}
-      <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-white/[0.1] to-transparent rounded-full"></div>
-
       {/* Persistent Color Indicator - MOVED TO RIGHT */}
       <div className={`
         absolute right-[-1px] top-4 bottom-4 w-1.5 rounded-l-md transition-all duration-300 z-10
@@ -111,7 +110,13 @@ export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSe
       <div className="flex items-center justify-between gap-3 mb-2 pr-4 pl-1 pt-2">
 
         {/* Settings Button (Now First/Left) */}
-        <button className="text-[#52525b] hover:text-[#a1a1aa] transition-colors p-1 shrink-0 rounded hover:bg-[#1a1b1f]/50">
+        <button 
+          className="text-[#52525b] hover:text-[#a1a1aa] transition-colors p-1 shrink-0 rounded hover:bg-[#1a1b1f]/50"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSettingsClick?.();
+          }}
+        >
           <Settings size={14} />
         </button>
 
@@ -151,12 +156,8 @@ export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSe
           </div>
         </div>
 
-        {/* 4. METER WELL (Now Right) */}
-        <div className="h-full w-[80px] bg-[#08090c]/90 backdrop-blur-[2px] rounded-md border border-[#1a1b1f] shadow-[inset_0_2px_4px_rgba(0,0,0,0.5),inset_0_0_0_1px_rgba(0,0,0,0.3)] relative overflow-hidden flex items-end px-[2px] pb-[2px] pt-[5px]">
-          {/* Screen Glass Reflection */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.06] to-transparent opacity-40 pointer-events-none z-40"></div>
-          {/* 顶部内阴影增强 */}
-          <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-black/30 to-transparent pointer-events-none z-30"></div>
+        {/* 4. METER WELL (Now Right) - 玻璃内嵌 */}
+        <div className="h-full w-[80px] bg-[#050607]/80 rounded-md border border-[#18191d]/50 shadow-[inset_0_2px_6px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(255,255,255,0.02)] relative overflow-hidden flex items-end px-[2px] pb-[2px] pt-[5px]">
           {/* Dark Scanline Overlay */}
           <div className="absolute inset-0 z-20 pointer-events-none opacity-20"
             style={{ backgroundImage: 'linear-gradient(0deg, #000 50%, transparent 50%)', backgroundSize: '100% 2px' }}>

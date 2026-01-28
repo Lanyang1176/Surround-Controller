@@ -1,0 +1,108 @@
+# TOPPING SURROUND CONTROLLER
+
+## 项目概述
+
+一款专业级环绕声控制器的 Web 界面，为 TOPPING 音频设备设计。支持多达 9.1.6 声道的沉浸式音频配置与管理。
+
+---
+
+## 技术栈
+
+- **框架**: React 19 + TypeScript
+- **构建**: Vite 6
+- **样式**: TailwindCSS + CSS Variables
+- **图标**: Lucide React
+- **字体**: Inter (UI) + JetBrains Mono (数据显示)
+
+---
+
+## 核心功能
+
+### 信号路由
+- **16 通道输入/输出管理** - 支持多种格式 (Stereo, 5.1, 7.1.4, 9.1.6)
+- **通道映射** - 灵活的物理端口到逻辑声道分配
+- **Solo/Mute** - 实时监听控制与 Latch 模式
+
+### 扬声器可视化
+- **俯视图布局** - 直观的 2D 空间定位
+- **分层高度显示** - 床层 / 中层 / 顶层高度编码
+- **框选交互** - 批量选择与快速编组
+
+### 音频处理
+- **参量 EQ** - 每通道最多 8 段，支持 Peak/Shelf/Pass 滤波器类型
+- **图形 EQ** - 16 段 ISO 标准频段
+- **低音管理** - 分频点设置、斜率选择、多 Sub 路由
+- **Trim/Delay** - 通道增益校准与延迟补偿 (ms/m/cm 单位)
+
+### 响度监控
+- **EBU R128 电表** - M, S, I, TP 指标显示
+- **REF 预设** - 快速切换目标响度标准
+- **DIM/MUTE** - 一键衰减与静音
+
+---
+
+## UI 设计语言
+
+**"Pro Audio Hardware Console"** - 专业音频硬件控制台美学
+
+### 色彩系统
+```
+背景层次: #08090c → #0f1014 → #151619
+边框: rgba(255,255,255, 0.04/0.07/0.12)
+文字: #d4d4d8 / #a1a1aa / #71717a
+强调色:
+  - Cyan #00d4ff (主色)
+  - Amber #ffaa00 (警告/Source)
+  - Emerald #00e890 (正常)
+  - Red #ff3b3b (危险/削波)
+```
+
+### 视觉特征
+- **玻璃控制台** - 多层深度与微透明面板
+- **内凹视窗** - 内阴影模拟嵌入式显示器
+- **LED 发光** - 强调色带 text-shadow 荧光效果
+- **激光雕刻** - 沉入式标题与分隔线
+- **硬件旋钮** - 带弧形进度条的可拖拽控制
+
+### 交互模式
+- **垂直拖拽** - 旋钮数值调节
+- **点击切换** - 开关状态
+- **双击重置** - 恢复默认值
+- **框选** - 批量操作扬声器
+
+---
+
+## 目录结构
+
+```
+/
+├── App.tsx              # 主应用入口 + 布局
+├── types.ts             # TypeScript 类型定义
+├── index.html           # HTML 入口 + 全局样式变量
+├── components/
+│   ├── Visualizer.tsx           # 扬声器俯视图可视化
+│   ├── SourceConfigEditor.tsx   # 输入源配置面板
+│   ├── SourceStrip.tsx          # 输入源条目 UI
+│   ├── OutputStrip.tsx          # 输出条目 UI
+│   ├── Knob.tsx                 # 可拖拽旋钮组件
+│   ├── Meter.tsx                # 电平表组件
+│   ├── HardwareUI.tsx           # 硬件风格基础组件
+│   └── OutputConfigEditor/
+│       ├── index.tsx            # 输出配置编辑器主入口
+│       ├── ParametricEQ.tsx     # 参量 EQ 编辑器
+│       ├── GraphicEQ.tsx        # 图形 EQ 编辑器
+│       ├── BassManagement.tsx   # 低音管理面板
+│       ├── ChannelRouting.tsx   # 通道路由矩阵
+│       └── SpeakerLayoutSelector.tsx # 布局选择器
+└── lib/
+    └── utils.ts          # 工具函数 (cn, clsx)
+```
+
+---
+
+## 运行
+
+```bash
+npm install
+npm run dev
+```

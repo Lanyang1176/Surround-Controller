@@ -58,7 +58,7 @@ export const Meter: React.FC<MeterProps> = ({
 
       {/* Label and Color Strip */}
       <div className="w-full flex flex-col items-center gap-0.5 mt-1">
-        <span className="text-[9px] font-bold tracking-tight leading-none uppercase text-[#71717a] group-hover:text-[#d4d4d8] transition-colors">
+        <span className="text-[10px] font-bold font-mono tracking-wide leading-none uppercase text-[#e4e4e7] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] group-hover:text-[#fafafa] transition-colors">
           {label}
         </span>
         {/* Bottom Color Strip */}
