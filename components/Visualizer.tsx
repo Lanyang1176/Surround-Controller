@@ -67,14 +67,21 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
 
     // UI Scale Logic
     const [uiScale, setUiScale] = useState(1);
+    const [worldScale, setWorldScale] = useState(1);
 
     useEffect(() => {
         const updateScale = () => {
             if (containerRef.current) {
-                const { width } = containerRef.current.getBoundingClientRect();
+                const { width, height } = containerRef.current.getBoundingClientRect();
                 // Base width 1280px. Scale dynamically from 0.6 to 2.0 (Supports 4K and small screens)
                 const newScale = Math.min(Math.max(width / 1280, 0.6), 2.0);
                 setUiScale(newScale);
+
+                // World Scale ensures speakers fit dynamically into the available container space
+                const wScale = width / 1000;
+                const hScale = height / 700;
+                const newWorldScale = Math.min(Math.max(Math.min(wScale, hScale), 0.35), 2.5);
+                setWorldScale(newWorldScale);
             }
         };
 
@@ -493,14 +500,14 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
             {/* TOP CENTER: Context Switcher (Fluid Sliding Toggle) - MOVED FROM BOTTOM */}
             {variant !== 'editor' && (
                 <div
-                    className="absolute top-12 left-1/2 -translate-x-1/2 z-30 pointer-events-auto select-none"
-                    style={{ transform: `translateX(-50%) scale(${uiScale})`, transformOrigin: 'top center' }}
+                    className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto select-none"
+                    style={{ transform: `translateX(-50%) scale(${worldScale})`, transformOrigin: 'top center' }}
                 >
-                    <div className="relative flex bg-[#0a0b0e]/50 backdrop-blur-md rounded-lg border border-white/[0.06] p-[3px] shadow-xl w-[200px] h-[36px]">
+                    <div className="relative flex bg-[#0a0b0e]/50 backdrop-blur-md rounded-lg border border-white/[0.06] p-1 shadow-xl w-[260px] h-[44px]">
                         {/* The Sliding Highlight */}
                         <div
-                            className={`absolute top-[3px] bottom-[3px] w-[calc(50%-3px)] rounded bg-[#151619] border border-[#3f3f46]/40 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] z-0
-                            ${context === 'SOURCE' ? 'left-[3px]' : 'left-[calc(50%)]'}
+                            className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded bg-[#151619] border border-[#3f3f46]/40 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] z-0
+                            ${context === 'SOURCE' ? 'left-1' : 'left-[calc(50%)]'}
                             `}
                         >
                             {/* Optional Glow based on selection */}
@@ -509,7 +516,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
 
                         <button
                             className={`
-                                flex-1 relative z-10 flex items-center justify-center text-[11px] font-bold uppercase tracking-widest transition-colors duration-200
+                                flex-1 relative z-10 flex items-center justify-center text-sm font-bold uppercase tracking-widest transition-colors duration-200
                                 ${context === 'SOURCE' ? 'text-[#0fa070]' : 'text-[#71717a] hover:text-[#a1a1aa]'}
                             `}
                             onClick={() => onContextChange && onContextChange('SOURCE')}
@@ -519,7 +526,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
 
                         <button
                             className={`
-                                flex-1 relative z-10 flex items-center justify-center text-[11px] font-bold uppercase tracking-widest transition-colors duration-200
+                                flex-1 relative z-10 flex items-center justify-center text-sm font-bold uppercase tracking-widest transition-colors duration-200
                                 ${context === 'OUTPUT' ? 'text-[#818cf8]' : 'text-[#71717a] hover:text-[#a1a1aa]'}
                             `}
                             onClick={() => onContextChange && onContextChange('OUTPUT')}
@@ -620,9 +627,9 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
             {/* DEFAULT MODE CONTROL STACK (Centered, Scaled) */}
             {variant !== 'editor' && (
                 <div
-                    className="absolute left-1/2 -translate-x-1/2 z-[45] bottom-8 pointer-events-none flex flex-col items-center justify-end"
+                    className="absolute left-1/2 -translate-x-1/2 z-[45] bottom-4 pointer-events-none flex flex-col items-center justify-end"
                     style={{
-                        transform: `translateX(-50%) scale(${uiScale})`,
+                        transform: `translateX(-50%) scale(${worldScale})`,
                         transformOrigin: 'bottom center'
                     }}
                 >
@@ -635,36 +642,36 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             : 'opacity-0 -translate-y-[10px] scale-95'
                         }
                     `}>
-                        <div className="flex items-center gap-2 px-5 py-1.5 bg-[#0a0b0e]/90 backdrop-blur-md rounded-2xl border border-white/[0.08] shadow-lg whitespace-nowrap">
+                        <div className="flex items-center gap-3 px-8 py-3 bg-[#0a0b0e]/90 backdrop-blur-md rounded-2xl border border-white/[0.08] shadow-lg whitespace-nowrap">
                             {selectedSpeakerData ? (
                                 <>
-                                    <span className="text-xs font-bold text-[#e4e4e7] tracking-widest">{selectedSpeakerData.label}</span>
-                                    <span className="w-px h-3 bg-white/15"></span>
-                                    <span className="text-xs text-[#a1a1aa] font-mono">CH {selectedSpeakerData.index}</span>
+                                    <span className="text-base font-bold text-[#e4e4e7] tracking-widest">{selectedSpeakerData.label}</span>
+                                    <span className="w-px h-5 bg-white/15"></span>
+                                    <span className="text-base text-[#a1a1aa] font-mono">CH {selectedSpeakerData.index}</span>
                                 </>
                             ) : individualSelection.length > 1 ? (
-                                <span className={`text-xs font-bold tracking-[0.2em] uppercase ${interactionMode === 'SOLO' ? 'text-[#2eb8cc]' : 'text-[#dc2626]'}`}>
+                                <span className={`text-base font-bold tracking-[0.2em] uppercase ${interactionMode === 'SOLO' ? 'text-[#2eb8cc]' : 'text-[#dc2626]'}`}>
                                     {individualSelection.length} SPEAKERS {interactionMode}
                                 </span>
                             ) : selectedGroup ? (
-                                <span className={`text-xs font-bold tracking-[0.2em] uppercase text-[#e4e4e7]`}>
+                                <span className={`text-base font-bold tracking-[0.2em] uppercase text-[#e4e4e7]`}>
                                     {selectedGroup} GROUP
-                                    <span className={`ml-2 ${interactionMode === 'SOLO' ? 'text-[#2eb8cc]' : 'text-[#dc2626]'}`}>{interactionMode}</span>
+                                    <span className={`ml-3 ${interactionMode === 'SOLO' ? 'text-[#2eb8cc]' : 'text-[#dc2626]'}`}>{interactionMode}</span>
                                 </span>
                             ) : null}
                         </div>
                     </div>
                     {/* Main Toolbar (Capsule) - Relative Z-20 to sit on top */}
-                    <div className="relative z-20 flex items-center gap-3 pointer-events-auto bg-[#0a0b0e]/85 backdrop-blur-2xl border border-white/[0.06] rounded-full px-4 py-2 shadow-xl shadow-black/50 select-none">
+                    <div className="relative z-20 flex items-center gap-5 pointer-events-auto bg-[#0a0b0e]/85 backdrop-blur-2xl border border-white/[0.06] rounded-full px-6 py-3 shadow-xl shadow-black/50 select-none">
 
                         {/* Solo/Mute Segmented Control */}
-                        <div className="flex bg-white/[0.04] rounded-full p-0.5 relative items-center">
+                        <div className="flex bg-white/[0.04] rounded-full p-1 relative items-center">
                             {['SOLO', 'MUTE'].map((m) => (
                                 <button
                                     key={m}
                                     onClick={(e) => { e.stopPropagation(); setInteractionMode(m as 'SOLO' | 'MUTE'); }}
                                     className={`
-                                        relative z-10 px-4 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full transition-all duration-300 flex items-center justify-center
+                                        relative z-10 px-8 py-2 text-sm font-bold uppercase tracking-widest rounded-full transition-all duration-300 flex items-center justify-center
                                         ${interactionMode === m
                                             ? (m === 'SOLO' ? 'text-[#2eb8cc] bg-[#1a8a9c]/30 shadow-[0_0_10px_rgba(46,184,204,0.12)]' : 'text-[#dc2626] bg-[#b91c1c]/30 shadow-[0_0_10px_rgba(220,38,38,0.12)]')
                                             : 'text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]'
@@ -676,10 +683,10 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             ))}
                         </div>
 
-                        <div className="w-px h-5 bg-white/[0.06]"></div>
+                        <div className="w-px h-6 bg-white/[0.06]"></div>
 
                         {/* Speaker Groups */}
-                        <div className="flex items-center gap-0.5">
+                        <div className="flex items-center gap-1.5">
                             {Object.keys(GROUPS).map(g => {
                                 const active = selectedGroup === g;
                                 const hasSpk = speakers.some(s => GROUPS[g].includes(s.id));
@@ -689,7 +696,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                                         disabled={!hasSpk}
                                         onClick={(e) => { e.stopPropagation(); if (hasSpk) { if (active) { setSelectedGroup(null); setIndividualSelection([]); } else { setSelectedGroup(g); setIndividualSelection(GROUPS[g]); } } }}
                                         className={`
-                                            px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all
+                                            px-5 py-2 rounded-md text-sm font-bold uppercase tracking-wider transition-all
                                             ${!hasSpk
                                                 ? 'opacity-20 hidden'
                                                 : active
@@ -705,7 +712,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                         </div>
 
                         {/* Clean Button (Permanent) */}
-                        <div className="w-px h-5 bg-white/[0.06]"></div>
+                        <div className="w-px h-6 bg-white/[0.06]"></div>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -717,16 +724,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             }}
                             disabled={!isSelectionActive}
                             className={`
-                                flex items-center gap-1.5 px-2 transition-all group
+                                flex items-center gap-2.5 px-4 transition-all group
                                 ${isSelectionActive
-                                    ? 'text-[#dc2626] cursor-pointer drop-shadow-[0_0_6px_rgba(220,38,38,0.3)]'
+                                    ? 'text-[#dc2626] cursor-pointer drop-shadow-[0_0_8px_rgba(220,38,38,0.4)]'
                                     : 'text-[#71717a] cursor-not-allowed opacity-50'
                                 }
                             `}
                             title="Clear Selection"
                         >
-                            <RotateCw size={12} className={`transition-transform duration-500 ${isSelectionActive ? 'group-hover:rotate-180 text-[#dc2626]' : ''}`} />
-                            <span className="text-[10px] font-bold tracking-wider uppercase">CLEAN</span>
+                            <RotateCw size={16} className={`transition-transform duration-500 ${isSelectionActive ? 'group-hover:rotate-180 text-[#dc2626]' : ''}`} />
+                            <span className="text-sm font-bold tracking-wider uppercase">CLEAN</span>
                         </button>
                     </div>
                 </div>
@@ -746,7 +753,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                 >
                     {/* World Container - 3D Transformed */}
                     <div
-                        className="relative w-full h-full max-w-[90%] max-h-[90%] pointer-events-auto transition-transform duration-700 ease-out"
+                        className="relative w-full h-full max-w-[1400px] aspect-[16/10] pointer-events-auto transition-transform duration-700 ease-out"
                         style={{
                             transformStyle: 'preserve-3d',
                             transform: 'rotateX(18deg) rotateZ(0deg)',
@@ -997,27 +1004,27 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                             // 5. Geometry & Z-Depth
                             const zDepth = spk.z * 110;
                             // Outer Container Size (Hitbox)
-                            const sizeClass = isHeight ? 'w-20 h-24' : 'w-16 h-20';
+                            const sizeClass = isHeight ? 'w-28 h-32' : 'w-24 h-28';
 
-                            // Scale Logic - 更平滑的缩放
-                            const baseScale = 1;
+                            // Scale Logic - 更平滑的缩放，顶置声道稍微缩小一点以适应 3D 景深
+                            const baseScale = worldScale * (isHeight ? 0.9 : 1);
                             const activeScale = (isActive || isHighlighted) ? 1.08 : (isPending ? 1.03 : (isDimmed || isMuted ? 0.97 : 1));
                             const totalScale = baseScale * activeScale;
 
                             // Badge Class (The visual box)
-                            // RESTORED DIMENSIONS: w-14 h-10 (standard), w-12 h-14 (heights potential modification if needed, but keeping consistent for now)
+                            // RESTORED DIMENSIONS: increased from w-14 h-10 to w-20 h-14 to look substantial in the layout
                             // 根据状态动态设置边框宽度
-                            const borderWidth = isActive ? 'border-[2.5px]' : (isHighlighted ? 'border-2' : (isPending ? 'border-2 border-dashed' : 'border-[1.5px]'));
+                            const borderWidth = isActive ? 'border-[1.5px]' : (isHighlighted ? 'border-2' : (isPending ? 'border-2 border-dashed' : 'border-[1.5px]'));
                             const badgeClass = `
-                                w-14 h-10 rounded flex items-center justify-center backdrop-blur-sm relative overflow-visible pointer-events-none
+                                w-20 h-14 rounded flex items-center justify-center backdrop-blur-sm relative overflow-visible pointer-events-none
                                 ${borderWidth}
                                 ${finalText} ${finalBorder} ${finalBg} ${finalShadow} ${finalRing} ${finalOpacity}
-                                ${(!isActive && !isHighlighted && !isMuted && !isDimmed && !isPending) ? `${theme.hoverBorder} ${theme.hoverBg} group-hover:scale-[1.02]` : ''}
+                                ${(!isActive && !isHighlighted && !isMuted && !isDimmed && !isPending) ? `${theme.hoverBorder} ${theme.hoverBg}` : ''}
                             `;
 
                             // 内联过渡样式 - 更精确控制
                             const badgeTransition = {
-                                transition: 'background-color 0.5s ease-out, border-color 0.5s ease-out, box-shadow 0.5s ease-out, transform 0.5s ease-out, opacity 0.5s ease-out'
+                                transition: 'background-color 0.25s ease-out, border-color 0.25s ease-out, box-shadow 0.25s ease-out, transform 0.25s ease-out, opacity 0.25s ease-out'
                             };
 
                             return (
@@ -1029,7 +1036,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
                                         top: `${top}%`,
                                         transform: `translate(-50%, -50%) translateZ(${zDepth}px) scale(${totalScale})`,
                                         transformStyle: 'preserve-3d',
-                                        transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), z-index 0s'
+                                        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), z-index 0s'
                                     }}
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
@@ -1118,16 +1125,19 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
 
                                     {/* Speaker Badge/Icon Container */}
                                     <div className={badgeClass} style={badgeTransition}>
-                                        <span className="text-xs font-bold font-mono">{spk.index}</span>
+                                        <span className="text-sm font-bold font-mono">{spk.index}</span>
                                     </div>
 
                                     {/* Label - BRIGHTENED */}
                                     <div className={`
-                                        text-center mt-1.5 text-[11px] font-bold tracking-wider transition-all duration-300 select-none relative z-20 pointer-events-none
+                                        text-center mt-2 text-[13px] font-bold tracking-wider transition-all duration-300 select-none relative z-20 pointer-events-none
                                         ${(isActive || isHighlighted) ? 'text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]' : 'text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] group-hover:text-white'}
                                     `}>
                                         {spk.label}
                                     </div>
+
+                                    {/* INVISIBLE SOLID HITBOX: Prevents hover flickering in 3D space by ensuring the entire sizeClass box captures pointer events */}
+                                    <div className="absolute top-0 left-0 w-full h-full z-50 bg-black/0 pointer-events-auto rounded-lg"></div>
                                 </div>
                             );
                         })}

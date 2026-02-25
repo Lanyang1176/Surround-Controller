@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Source } from '../types';
-import { Settings, Lock, LockOpen, ChevronDown, MonitorPlay, ArrowRightCircle } from 'lucide-react';
+import { Settings, Lock, LockOpen, ChevronDown, CircleDot, ArrowRightCircle } from 'lucide-react';
 import { Knob } from './Knob';
 
 interface SourceStripProps {
@@ -116,12 +116,12 @@ export const SourceStrip: React.FC<SourceStripProps> = ({ source, selected, isEd
                 {/* Header */}
                 <div className="flex items-center gap-2 mb-2 pl-4 pt-2">
                     <div className="h-4 w-1 bg-[#2a2b30] rounded-full"></div>
-                    <span className="text-[#52525b] font-medium text-sm group-hover:text-[#71717a] transition-colors">Empty Slot</span>
-                    <Settings size={14} className="text-[#3f3f46] ml-auto mr-2 group-hover:text-[#52525b]" />
+                    <span className="text-[#71717a] font-medium text-sm group-hover:text-[#a1a1aa] transition-colors">Empty Slot</span>
+                    <Settings size={14} className="text-[#52525b] ml-auto mr-2 group-hover:text-[#71717a]" />
                 </div>
                 {/* Empty Well */}
-                <div className="mx-4 h-10 bg-[#08090c]/30 rounded-lg border border-dashed border-[#2a2b30] flex items-center justify-center group-hover:border-[#3f3f46] transition-colors">
-                    <span className="text-[9px] uppercase text-[#3f3f46] font-bold tracking-[0.2em] group-hover:text-[#52525b]">Unassigned</span>
+                <div className="mx-4 h-10 bg-[#08090c]/30 rounded-lg border border-dashed border-[#2a2b30] flex items-center justify-center group-hover:border-[#52525b] transition-colors">
+                    <span className="text-[9px] uppercase text-[#52525b] font-bold tracking-[0.2em] group-hover:text-[#71717a]">Unassigned</span>
                 </div>
             </div>
         );
@@ -262,7 +262,7 @@ export const SourceStrip: React.FC<SourceStripProps> = ({ source, selected, isEd
                 </div>
 
                 {/* 2. TRIM KNOB SECTION - 无背景，带过渡动画 */}
-                <div 
+                <div
                     className={`h-full flex flex-col items-center justify-center relative group/knob overflow-hidden transition-all duration-300 ease-out ${shouldShowTrim ? 'w-[42px] opacity-100' : 'w-0 opacity-0'}`}
                 >
                     {/* Label */}
@@ -282,17 +282,17 @@ export const SourceStrip: React.FC<SourceStripProps> = ({ source, selected, isEd
                     {/* Monitor/Activate Button */}
                     <div
                         className={`
-                            h-7 w-8 rounded-[4px] border flex items-center justify-center transition-all duration-300
-                            ${!hexColor ? (selected ? theme.btnActive : theme.btnInactive) : (selected ? '' : theme.btnInactive)}
+                            h-7 w-9 rounded flex items-center justify-center transition-all duration-300
+                            ${!hexColor ? (selected ? theme.btnActive : theme.btnInactive) : (selected ? 'border border-transparent' : theme.btnInactive)}
                         `}
                         style={hexColor && selected ? {
-                            backgroundColor: hexColor,
-                            borderColor: `${hexColor}cc`,
-                            color: '#000',
-                            boxShadow: `inset 0 1px 4px rgba(255,255,255,0.4), 0 0 15px ${hexColor}80`
+                            backgroundColor: `${hexColor}25`, // Professional translucent glow
+                            borderColor: `${hexColor}80`,     // Highlighted border
+                            color: hexColor,                  // Colored neon icon
+                            boxShadow: `0 0 15px ${hexColor}30, inset 0 0 10px ${hexColor}20` // Smooth inner/outer glow
                         } : undefined}
                     >
-                        <MonitorPlay size={14} strokeWidth={selected ? 2.5 : 2} className={selected ? 'animate-pulse-slow' : 'opacity-70'} />
+                        <CircleDot size={14} strokeWidth={selected ? 2.5 : 1.5} className={selected ? 'drop-shadow-[0_0_8px_currentColor] animate-pulse-slow' : 'opacity-50'} />
                     </div>
                 </div>
 

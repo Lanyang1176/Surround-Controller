@@ -808,10 +808,10 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Right Wing: The Offset Control Tower (Span 4) */}
-                  <div className="col-span-4 flex flex-col relative pt-4 pl-1">
+                  <div className="col-span-4 flex flex-col relative pl-1">
 
                     {/* The Control Tower Panel */}
-                    <InsetPanel className="flex-1 w-full bg-[#111216] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.7)] border-t border-white/[0.06] flex flex-col relative" >
+                    <InsetPanel className="flex-1 w-full bg-[#0a0b0e] relative flex flex-col" >
                       {/* Reference used for scaling calculation if needed */}
                       <div className="absolute inset-0 pointer-events-none" ref={knobContainerRef}></div>
 
@@ -865,8 +865,8 @@ const App: React.FC = () => {
                           {/* Center Value Display */}
                           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-2">
                             <span className={cn(
-                              "text-2xl font-bold font-mono tracking-tighter drop-shadow-md",
-                              isMute ? "text-[#dc2626]" : isDim ? "text-[#d4890f]" : "text-[#2eb8cc]"
+                              "text-2xl font-bold font-mono tabular-nums tracking-tighter",
+                              isMute ? "text-[#dc2626] drop-shadow-[0_0_10px_rgba(220,38,38,0.4)]" : isDim ? "text-[#d4890f] drop-shadow-[0_0_10px_rgba(212,137,15,0.4)]" : "text-[#2eb8cc] drop-shadow-[0_0_10px_rgba(46,184,204,0.4)]"
                             )}>
                               {(mainVolume === 0 ? '-inf' : ((mainVolume / 100) * 80 - 80).toFixed(1))}
                             </span>
