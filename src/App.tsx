@@ -11,58 +11,47 @@ import { SourceConfigEditor } from './components/SourceConfigEditor';
 import { OutputConfigEditor } from './components/OutputConfigEditor';
 import { Source, Output } from './types';
 import { LOUDNESS_STANDARDS, getTargetLufs, SPEAKERS_916, CHANNELS_16, FORMAT_CHANNELS } from './constants/audio';
-
-// Mock Data
-const INITIAL_SOURCES: Source[] = [
-  { id: 's1', name: 'Source A', format: '9.1.6', active: true, color: 'amber', assigned: true, locked: false },
-  { id: 's2', name: 'Source B', format: '7.1.4', active: false, color: 'blue', assigned: true, locked: false },
-  { id: 's3', name: 'Source C', format: 'Stereo', active: false, color: 'green', assigned: false, locked: false }, // Unassigned
-  { id: 's4', name: 'Source D', format: '5.1', active: false, color: 'purple', assigned: true, locked: false },
-  { id: 's5', name: 'Source E', format: 'Stereo', active: false, color: 'red', assigned: true, locked: false },
-];
-
-const MOCK_OUTPUTS: Output[] = [
-  { id: 'o1', name: 'Main', format: '9.1.6', active: true, color: 'cyan' },
-  { id: 'o2', name: 'Alt 1', format: 'Stereo', active: false, color: 'yellow' },
-  { id: 'o3', name: 'Alt 2', format: '5.1', active: false, color: 'orange' },
-  { id: 'o4', name: 'Alt 3', format: 'Stereo', active: false, color: 'lime' },
-];
+import {
+  useSources, useActiveSourceIds, useOutputs, useActiveOutputId,
+  useVolume, useMute, useDim, useLoudnessStandard, useRefPresets,
+  useMeterMonitorMode, useDeviceActions, useDeviceInfo,
+} from './hooks/useDevice';
+import { useMeterData } from './hooks/useMeterData';
 
 const App: React.FC = () => {
-  const [sources, setSources] = useState<Source[]>(INITIAL_SOURCES);
+  // ─── Device state from Zustand store ───────────────────────────────
+  const sources = useSources();
+  const activeSourceIds = useActiveSourceIds();
+  const outputs = useOutputs();
+  const activeOutput = useActiveOutputId();       // string ID
+  const mainVolume = useVolume();                  // dB (-96 to +12)
+  const isMute = useMute();
+  const isDim = useDim();
+  const loudnessStandard = useLoudnessStandard();
+  const refPresets = useRefPresets();
+  const meterMonitorMode = useMeterMonitorMode();
+  const { sampleRate, clockSource, deviceName } = useDeviceInfo();
+  const meterRef = useMeterData();
+  const actions = useDeviceActions();
+
+  // ─── UI-only state ─────────────────────────────────────────────────
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
-  // Support multiple active sources (Locking/Summing behavior)
-  const [activeSourceIds, setActiveSourceIds] = useState<string[]>(['s1']);
-
-  // Output state
-  const [outputs, setOutputs] = useState<Output[]>(MOCK_OUTPUTS);
   const [editingOutputId, setEditingOutputId] = useState<string | null>(null);
-  const [activeOutput, setActiveOutput] = useState('o1');
-  const [selectionContext, setSelectionContext] = useState<'SOURCE' | 'OUTPUT'>('SOURCE'); // Track context
-  const [mainVolume, setMainVolume] = useState(75);
-  const [isDim, setIsDim] = useState(false);
-  const [isMute, setIsMute] = useState(false);
+  const [selectionContext, setSelectionContext] = useState<'SOURCE' | 'OUTPUT'>('SOURCE');
 
-  // Loudness State
-  const [loudnessStandard, setLoudnessStandard] = useState('Netflix');
+  // Loudness menu
   const [isLoudnessMenuOpen, setIsLoudnessMenuOpen] = useState(false);
   const [isLoudnessRunning, setIsLoudnessRunning] = useState(false);
   const loudnessMenuRef = useRef<HTMLDivElement>(null);
 
-  // State for Reference Presets (Configurable)
-  const [refPresets, setRefPresets] = useState([
-    { id: 'ref1', name: 'Ref 1', level: -20 },
-    { id: 'ref2', name: 'Ref 2', level: -14 },
-    { id: 'ref3', name: 'Ref 3', level: -10 }
-  ]);
+  // Ref preset config
   const [configRefId, setConfigRefId] = useState<string | null>(null);
 
-  // Meter Menu State
-  const [meterMonitorMode, setMeterMonitorMode] = useState<{ type: 'FOLLOW_INPUT' | 'FOLLOW_OUTPUT' | 'SPECIFIC', id?: string }>({ type: 'FOLLOW_INPUT' });
+  // Meter menu
   const [isMeterMenuOpen, setIsMeterMenuOpen] = useState(false);
   const meterMenuRef = useRef<HTMLDivElement>(null);
 
-  // Resizing State
+  // Resizing state
   const [controlDeckHeight, setControlDeckHeight] = useState(340);
   const [meterBridgeRatio, setMeterBridgeRatio] = useState(0.60);
   const knobContainerRef = useRef<HTMLDivElement>(null);
@@ -79,13 +68,30 @@ const App: React.FC = () => {
 
   const bottomGridRef = useRef<HTMLDivElement>(null);
 
-  // Animation frame for meters
-  const [meterValues, setMeterValues] = useState<{ level: number, peak: number }[]>(
-    Array(16).fill({ level: 0, peak: 0 })
-  );
-  const [lufsMeter, setLufsMeter] = useState<{ level: number, peak: number }>({ level: 0, peak: 0 });
+  // ─── Meter snapshot (bridge from ref to React rendering) ───────────
+  const [meterSnapshot, setMeterSnapshot] = useState<{
+    levels: number[];
+    peaks: number[];
+    lufs: { m: number; s: number; i: number; tp: number };
+  }>({
+    levels: Array(16).fill(0),
+    peaks: Array(16).fill(0),
+    lufs: { m: -Infinity, s: -Infinity, i: -Infinity, tp: -Infinity },
+  });
 
-  // Click outside handler for loudness menu
+  useEffect(() => {
+    const id = setInterval(() => {
+      const data = meterRef.current;
+      setMeterSnapshot({
+        levels: [...data.levels],
+        peaks: [...data.peaks],
+        lufs: { ...data.lufs },
+      });
+    }, 50);
+    return () => clearInterval(id);
+  }, []);
+
+  // ─── Click outside handlers ────────────────────────────────────────
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (loudnessMenuRef.current && !loudnessMenuRef.current.contains(event.target as Node)) {
@@ -186,6 +192,8 @@ const App: React.FC = () => {
     e.preventDefault();
   };
 
+  // ─── Derived state ─────────────────────────────────────────────────
+
   // Calculate active channels based on ALL active sources
   const getActiveChannelIds = () => {
     const activeIds = new Set<string>();
@@ -199,89 +207,15 @@ const App: React.FC = () => {
     return activeIds;
   };
 
-  useEffect(() => {
-    // If no source is selected, everything is quiet
-    if (activeSourceIds.length === 0) {
-      setMeterValues(Array(16).fill({ level: 0, peak: 0 }));
-      return;
-    }
-
-    const activeIds = getActiveChannelIds();
-
-    const interval = setInterval(() => {
-      // Determine if we should mute the meters (Only if monitoring OUTPUT and System is Muted)
-      const isOutputMonitoring = meterMonitorMode.type === 'FOLLOW_OUTPUT' || (meterMonitorMode.type === 'SPECIFIC' && meterMonitorMode.id && MOCK_OUTPUTS.some(o => o.id === meterMonitorMode.id));
-
-      const shouldMuteMeter = isMute && isOutputMonitoring;
-
-      if (shouldMuteMeter) {
-        setMeterValues(Array(16).fill({ level: 0, peak: 0 }));
-        // Also zero LUFS if following output (conceptually)
-        setLufsMeter({ level: 0, peak: 0 });
-        return;
-      }
-
-      setMeterValues(prev => prev.map((val, i) => {
-        const chId = CHANNELS_16[i].id;
-
-        if (!activeIds.has(chId)) {
-          return { level: 0, peak: 0 };
-        }
-
-        const activityBooster = activeSourceIds.length > 1 ? 1.2 : 1.0;
-        const target = (Math.random() * 60 + 10) * activityBooster;
-
-        const newLevel = val.level * 0.6 + target * 0.4;
-        let newPeak = val.peak;
-        if (newLevel > newPeak) newPeak = newLevel;
-        else newPeak = Math.max(0, newPeak - 0.5);
-
-        return { level: Math.min(100, newLevel), peak: Math.min(100, newPeak) };
-      }));
-
-      // Simulate LUFS (Slower, Target around -23LUFS which is ~62% on this scale)
-      setLufsMeter(prev => {
-        if (!activeIds.size) return { level: 0, peak: 0 };
-        const target = 62 + (Math.random() * 10 - 5);
-        const newLevel = prev.level * 0.95 + target * 0.05;
-        let newPeak = prev.peak;
-        if (newLevel > newPeak) newPeak = newLevel;
-        else newPeak = Math.max(0, newPeak - 0.1);
-        return { level: newLevel, peak: newPeak };
-      });
-    }, 50);
-    return () => clearInterval(interval);
-  }, [isMute, activeSourceIds, sources, meterMonitorMode]);
-
-  const toggleSource = (id: string) => {
-    setActiveSourceIds(prev => {
-      if (prev.includes(id)) {
-        return prev.filter(pid => pid !== id);
-      }
-      const lockedActiveIds = prev.filter(pid => {
-        const s = sources.find(src => src.id === pid);
-        return s?.locked;
-      });
-      return [...lockedActiveIds, id];
-    });
-  };
-
-  const toggleLock = (id: string) => {
-    setSources(prev => prev.map(s => {
-      if (s.id === id) {
-        return { ...s, locked: !s.locked };
-      }
-      return s;
-    }));
-  };
+  // ─── Event handlers (wrapping store actions + UI context) ──────────
 
   const handleSourceSelect = (id: string) => {
-    toggleSource(id);
+    actions.selectSource(id);
     setSelectionContext('SOURCE');
   };
 
   const handleOutputSelect = (id: string) => {
-    setActiveOutput(id);
+    actions.selectOutput(id);
     setSelectionContext('OUTPUT');
   };
 
@@ -289,28 +223,26 @@ const App: React.FC = () => {
   const activeSourcesList = sources.filter(s => activeSourceIds.includes(s.id));
   const sourceFormat = activeSourcesList.length > 0 ? activeSourcesList[activeSourcesList.length - 1].format : '9.1.6';
 
-  const activeOutputData = MOCK_OUTPUTS.find(o => o.id === activeOutput);
+  const activeOutputData = outputs.find(o => o.id === activeOutput);
   const outputFormat = activeOutputData ? activeOutputData.format : '9.1.6';
 
   // Determine which format to show on Visualizer based on context
   const visualizerFormat = selectionContext === 'SOURCE' ? sourceFormat : outputFormat;
 
-  // Meters always follow Source (Input Monitoring) unless changed? usually meters are Input or Output switchable. 
-  // User didn't specify meters, so leaving them as Input Monitoring for now based on "Input Monitoring" label.
   // Determine Meter Format and Label and Color
   let meterTargetFormat = '9.1.6';
-  let meterLabel = 'INPUT MONITORING'; // Default label
-  let meterColor = 'cyan'; // Default color name
+  let meterLabel = 'INPUT MONITORING';
+  let meterColor = 'cyan';
 
   if (meterMonitorMode.type === 'FOLLOW_INPUT') {
-    const activeSrc = activeSourcesList.length > 0 ? activeSourcesList[activeSourcesList.length - 1] : INITIAL_SOURCES[0];
-    meterTargetFormat = activeSrc.format;
+    const activeSrc = activeSourcesList.length > 0 ? activeSourcesList[activeSourcesList.length - 1] : sources[0];
+    meterTargetFormat = activeSrc?.format ?? '9.1.6';
     meterLabel = 'INPUT MONITORING';
-    meterColor = activeSrc.color || 'amber';
+    meterColor = activeSrc?.color || 'amber';
   } else if (meterMonitorMode.type === 'FOLLOW_OUTPUT') {
     meterTargetFormat = outputFormat;
     meterLabel = 'OUTPUT MONITORING';
-    const activeOut = MOCK_OUTPUTS.find(o => o.id === activeOutput);
+    const activeOut = outputs.find(o => o.id === activeOutput);
     if (activeOut) meterColor = activeOut.color;
   } else if (meterMonitorMode.type === 'SPECIFIC') {
     const src = sources.find(s => s.id === meterMonitorMode.id);
@@ -319,7 +251,7 @@ const App: React.FC = () => {
       meterLabel = `IN: ${src.name}`;
       meterColor = src.color;
     } else {
-      const out = MOCK_OUTPUTS.find(o => o.id === meterMonitorMode.id);
+      const out = outputs.find(o => o.id === meterMonitorMode.id);
       if (out) {
         meterTargetFormat = out.format;
         meterLabel = `OUT: ${out.name}`;
@@ -358,7 +290,7 @@ const App: React.FC = () => {
       {/* Top Bar */}
       <header className="h-12 border-b border-[#1a1b1f] bg-[#0c0d11] flex items-center justify-between px-6 shrink-0 z-20 shadow-md">
         <div className="text-xs font-bold text-[#71717a] tracking-widest flex items-center gap-4 min-w-[200px]">
-          <span>CLOCK <span className="text-[#a1a1aa] ml-1">TOPPING 16 Mon</span></span>
+          <span>CLOCK <span className="text-[#a1a1aa] ml-1">{clockSource || 'TOPPING 16 Mon'}</span></span>
         </div>
 
         <div className="flex items-baseline gap-3">
@@ -370,7 +302,7 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex items-center justify-end gap-4 text-xs font-bold text-[#71717a] min-w-[200px]">
-          <span>SAMPLE RATE <span className="text-[#a1a1aa] ml-1">48000 Hz</span></span>
+          <span>SAMPLE RATE <span className="text-[#a1a1aa] ml-1">{sampleRate} Hz</span></span>
           <Settings size={16} className="text-[#71717a] cursor-pointer hover:text-[#d4d4d8]" />
         </div>
       </header>
@@ -411,8 +343,8 @@ const App: React.FC = () => {
                     isEditing={editingSourceId === src.id}
                     showTrim={showTrimKnob}
                     onSelect={handleSourceSelect}
-                    onToggleLock={toggleLock}
-                    onSettingsClick={() => setEditingSourceId(src.id)} // New Prop
+                    onToggleLock={actions.toggleSourceLock}
+                    onSettingsClick={() => setEditingSourceId(src.id)}
                   />
                 </div>
               ))}
@@ -427,11 +359,12 @@ const App: React.FC = () => {
               source={sources.find(s => s.id === editingSourceId)!}
               onClose={() => setEditingSourceId(null)}
               onSave={(updated) => {
-                setSources(prev => prev.map(s => s.id === updated.id ? updated : s));
+                actions.updateSource(updated);
                 setEditingSourceId(null);
               }}
               onColorChange={(sourceId, color) => {
-                setSources(prev => prev.map(s => s.id === sourceId ? { ...s, color } : s));
+                const source = sources.find(s => s.id === sourceId);
+                if (source) actions.updateSource({ ...source, color });
               }}
             />
           </div>
@@ -442,11 +375,12 @@ const App: React.FC = () => {
               output={outputs.find(o => o.id === editingOutputId)!}
               onClose={() => setEditingOutputId(null)}
               onSave={(updated) => {
-                setOutputs(prev => prev.map(o => o.id === updated.id ? updated : o));
+                actions.updateOutput(updated);
                 setEditingOutputId(null);
               }}
               onColorChange={(outputId, color) => {
-                setOutputs(prev => prev.map(o => o.id === outputId ? { ...o, color } : o));
+                const output = outputs.find(o => o.id === outputId);
+                if (output) actions.updateOutput({ ...output, color });
               }}
             />
           </div>
@@ -512,7 +446,7 @@ const App: React.FC = () => {
                               <button
                                 key={std.name}
                                 className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#1a1b1f] transition-colors group"
-                                onClick={() => { setLoudnessStandard(std.name); setIsLoudnessMenuOpen(false); }}
+                                onClick={() => { actions.setLoudnessStandard(std.name); setIsLoudnessMenuOpen(false); }}
                               >
                                 <span className={`text-[10px] font-bold font-mono ${loudnessStandard === std.name ? 'text-[#d4890f]' : 'text-[#71717a]'}`}>{std.name}</span>
                                 <span className={`text-[9px] font-mono ${loudnessStandard === std.name ? 'text-[#d4890f]/70' : 'text-[#52525b]'}`}>{std.target} LUFS</span>
@@ -526,20 +460,19 @@ const App: React.FC = () => {
                       <div className="flex items-center gap-2">
                         {(() => {
                           const targetLufs = getTargetLufs(loudnessStandard);
-                          const currentLufsValue = activeSourceIds.length ? (lufsMeter.level * 0.435 - 50) : null;
                           return [
-                            { label: 'M', value: activeSourceIds.length ? (lufsMeter.level * 0.4 - 45).toFixed(1) : '-inf' },
-                            { label: 'S', value: activeSourceIds.length ? (lufsMeter.level * 0.42 - 47).toFixed(1) : '-inf' },
-                            { label: 'I', value: currentLufsValue !== null ? currentLufsValue.toFixed(1) : '-inf', isMain: true, targetLufs },
-                            { label: 'TP', value: activeSourceIds.length ? (lufsMeter.level * 0.35 - 40).toFixed(1) : '-inf' },
+                            { label: 'M', value: activeSourceIds.length ? meterSnapshot.lufs.m.toFixed(1) : '-inf' },
+                            { label: 'S', value: activeSourceIds.length ? meterSnapshot.lufs.s.toFixed(1) : '-inf' },
+                            { label: 'I', value: activeSourceIds.length ? meterSnapshot.lufs.i.toFixed(1) : '-inf', isMain: true, targetLufs },
+                            { label: 'TP', value: activeSourceIds.length ? meterSnapshot.lufs.tp.toFixed(1) : '-inf' },
                           ].map(m => (
                             <div key={m.label} className={`flex flex-col items-end justify-center h-7 bg-[#0a0b0e] rounded border px-1.5 relative overflow-hidden ${m.isMain ? 'w-16 border-[#d4890f]/30 bg-[#1a1b1f]/80' : 'w-12 border-white/[0.1] bg-[#1a1b1f]/40'
                               }`}>
                               <span className="text-[8px] font-bold text-[#a1a1aa] tracking-wide mb-0.5">{m.label}</span>
                               <span className={`text-[10px] font-bold font-mono leading-none tabular-nums ${m.isMain
-                                ? (m.value !== '-inf' && Math.abs(parseFloat(m.value) - m.targetLufs) <= 1
+                                ? (m.value !== '-inf' && Math.abs(parseFloat(m.value) - m.targetLufs!) <= 1
                                   ? 'text-[#0fa070]'
-                                  : m.value !== '-inf' && parseFloat(m.value) > m.targetLufs
+                                  : m.value !== '-inf' && parseFloat(m.value) > m.targetLufs!
                                     ? 'text-[#d4890f]'
                                     : 'text-[#7db4c9]')
                                 : 'text-[#d4890f]'
@@ -621,8 +554,8 @@ const App: React.FC = () => {
                               <React.Fragment key={channel.id}>
                                 <div className="flex-1 h-full min-w-0 relative group">
                                   <Meter
-                                    level={meterValues[channel.originalIndex]?.level ?? 0}
-                                    peak={meterValues[channel.originalIndex]?.peak ?? 0}
+                                    level={meterSnapshot.levels[channel.originalIndex] ?? 0}
+                                    peak={meterSnapshot.peaks[channel.originalIndex] ?? 0}
                                     color={channel.color}
                                     label={channel.label}
                                   />
@@ -652,12 +585,22 @@ const App: React.FC = () => {
                             : [...baseScalePoints, targetLufs].sort((a, b) => b - a);
                           const lufsScalePoints = allPoints.map(v => ({ label: String(v), lufs: v }));
 
+                          // Convert LUFS value to bar percentage
+                          const lufsBarPercent = meterSnapshot.lufs.i > -Infinity
+                            ? lufsToPercent(meterSnapshot.lufs.i)
+                            : 0;
+
+                          // Peak as percentage
+                          const lufsPeakPercent = meterSnapshot.lufs.tp > -Infinity
+                            ? lufsToPercent(meterSnapshot.lufs.tp)
+                            : 0;
+
                           return (
                             <div className="flex shrink-0">
                               {/* LUFS Meter */}
                               <div className="w-8 h-full flex flex-col">
                                 {/* Clip LED */}
-                                <div className={`w-full h-1 mb-1 rounded-[1px] transition-colors duration-100 ${lufsMeter.peak >= 99 ? 'bg-[#dc2626] shadow-[0_0_6px_#dc2626]' : 'bg-[#1a0a0a]'}`}></div>
+                                <div className={`w-full h-1 mb-1 rounded-[1px] transition-colors duration-100 ${meterSnapshot.lufs.tp >= 0 ? 'bg-[#dc2626] shadow-[0_0_6px_#dc2626]' : 'bg-[#1a0a0a]'}`}></div>
                                 {/* Meter Track */}
                                 <div className="flex-1 w-full bg-[#0a0b0e] relative overflow-hidden rounded-[1px]">
                                   {/* Target indicator */}
@@ -668,12 +611,12 @@ const App: React.FC = () => {
                                   {/* LUFS Bar */}
                                   <div
                                     className="absolute bottom-0 w-full bg-[#3b82f6] transition-all duration-75 ease-out"
-                                    style={{ height: `${Math.min(100, Math.max(0, lufsMeter.level))}%` }}
+                                    style={{ height: `${Math.min(100, Math.max(0, lufsBarPercent))}%` }}
                                   ></div>
                                   {/* Peak line */}
                                   <div
                                     className="absolute w-full h-[1px] bg-[#e4e4e7] transition-all duration-300 ease-out z-10 shadow-sm mix-blend-screen"
-                                    style={{ bottom: `${Math.min(100, Math.max(0, lufsMeter.peak))}%` }}
+                                    style={{ bottom: `${Math.min(100, Math.max(0, lufsPeakPercent))}%` }}
                                   ></div>
                                 </div>
                                 {/* Label */}
@@ -731,11 +674,11 @@ const App: React.FC = () => {
                         {/* A. Ref Selectors - Segmented Control Style */}
                         <div className="flex w-full p-1 bg-[#050508] rounded-lg border border-white/[0.02] shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)] mb-2 relative">
                           {refPresets.map((ref) => {
-                            const isActive = Math.abs(((mainVolume / 100) * 80 - 80) - ref.level) < 0.5;
+                            const isActive = Math.abs(mainVolume - ref.level) < 0.5;
                             return (
                               <button
                                 key={ref.id}
-                                onClick={() => setMainVolume((ref.level + 80) * 1.25)}
+                                onClick={() => actions.setVolume(ref.level)}
                                 className={cn(
                                   "flex-1 py-1.5 text-[9px] font-bold rounded-md transition-all duration-300 relative",
                                   isActive
@@ -769,7 +712,7 @@ const App: React.FC = () => {
 
                           <Knob
                             value={mainVolume}
-                            onChange={setMainVolume}
+                            onChange={actions.setVolume}
                             size={140}
                             color={isMute ? '#dc2626' : isDim ? '#d4890f' : '#2eb8cc'}
                             max={12}
@@ -782,7 +725,7 @@ const App: React.FC = () => {
                               "text-2xl font-bold font-mono tabular-nums tracking-tighter",
                               isMute ? "text-[#dc2626] drop-shadow-[0_0_10px_rgba(220,38,38,0.4)]" : isDim ? "text-[#d4890f] drop-shadow-[0_0_10px_rgba(212,137,15,0.4)]" : "text-[#2eb8cc] drop-shadow-[0_0_10px_rgba(46,184,204,0.4)]"
                             )}>
-                              {(mainVolume === 0 ? '-inf' : ((mainVolume / 100) * 80 - 80).toFixed(1))}
+                              {mainVolume <= -96 ? '-inf' : mainVolume.toFixed(1)}
                             </span>
                             <span className="text-[9px] text-[#52525b] font-bold tracking-widest -mt-1">dB</span>
                           </div>
@@ -792,7 +735,7 @@ const App: React.FC = () => {
                         {/* C. Bottom Action Strip (Tactile Buttons) */}
                         <div className="w-full grid grid-cols-2 gap-3 mt-auto">
                           <button
-                            onClick={() => setIsDim(!isDim)}
+                            onClick={() => actions.setDim(!isDim)}
                             className={cn(
                               "h-9 rounded-lg flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 shadow-lg relative isolate active:scale-[0.98]",
                               isDim
@@ -812,7 +755,7 @@ const App: React.FC = () => {
                           </button>
 
                           <button
-                            onClick={() => setIsMute(!isMute)}
+                            onClick={() => actions.setMute(!isMute)}
                             className={cn(
                               "h-9 rounded-lg flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 shadow-lg relative isolate active:scale-[0.98]",
                               isMute
@@ -868,7 +811,7 @@ const App: React.FC = () => {
                   <OutputStrip
                     output={out}
                     selected={activeOutput === out.id}
-                    onSelect={setActiveOutput}
+                    onSelect={handleOutputSelect}
                     onSettingsClick={() => setEditingOutputId(out.id)}
                     isMuted={isMute}
                     isEditing={editingOutputId === out.id}
