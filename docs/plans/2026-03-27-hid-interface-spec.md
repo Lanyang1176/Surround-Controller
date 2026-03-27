@@ -1,311 +1,630 @@
-# Topping Surround Controller — HID 接口需求规格
+# Topping Surround Controller — 硬件对接规格书
 
-> 版本: 0.1 | 日期: 2026-03-27 | 作者: PGS 产品组
+> 版本: 0.2 | 日期: 2026-03-27 | 作者: PGS 产品组
 >
-> 本文档定义上位机（Electron 桌面应用）需要从硬件设备读取和写入的全部参数。
-> HID 报文格式、字节布局、端点分配由硬件工程师根据本文档需求自行设计。
+> 本文档的目标：把当前的前端原型改造成硬件工程师可以直接对接的状态。
+> 读完这份文档，硬件工程师只需要实现一个 TypeScript 类就能让整个系统跑起来。
 
 ---
 
-## 1. 架构概述
+## 1. 现状与问题
+
+### 1.1 当前架构
 
 ```
-┌──────────────────┐        USB HID        ┌──────────────────┐
-│  Electron App    │ ◄════════════════════► │  硬件设备          │
-│                  │                        │                    │
-│  职责：           │                        │  职责：             │
-│  · 参数显示与编辑  │    参数读写 (双向)      │  · 全部音频 DSP     │
-│  · 实时 Meter 显示│    Meter 数据 (设备→App) │  · Meter 计算       │
-│  · 用户交互       │                        │  · 状态管理          │
-└──────────────────┘                        └──────────────────┘
+┌──────────────────────────────┐
+│       Vite Web App           │
+│  React 19 + Tailwind + TS   │
+│                              │
+│  · 所有状态在 App.tsx useState│
+│  · Meter 用 Math.random()    │
+│  · 无设备通信层              │
+│  · 无 Electron 壳            │
+└──────────────────────────────┘
 ```
 
-**关键原则**：
-- 所有音频处理（EQ、路由、Bass Management、电平控制）在设备端 DSP 完成
-- 上位机是纯控制面板——发参数、收状态、显示 Meter
-- Meter 数据建议设备主动推送（行业惯例），刷新间隔 20-50ms
+### 1.2 不能直接交接的原因
+
+| 问题 | 说明 |
+|------|------|
+| **没有 Electron** | node-hid 需要 Node.js 环境，纯 Web 应用无法访问 USB |
+| **没有设备抽象层** | 15+ 个 `useState` 散落在 App.tsx，硬件工程师不知道往哪接 |
+| **Mock 数据内联** | 3 处独立的 `Math.random()` meter 模拟（App.tsx + SourceStrip + OutputStrip），无法统一替换 |
+| **没有 IPC** | Electron 的 Main Process ↔ Renderer Process 通信桥梁不存在 |
+| **没有连接管理** | 无设备发现、断连检测、重连逻辑 |
+
+### 1.3 目标架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Electron App                                                     │
+│                                                                   │
+│  ┌─────────────────────┐    IPC     ┌──────────────────────┐    │
+│  │  Renderer Process   │ ◄════════► │   Main Process       │    │
+│  │                     │  contextBridge │                   │    │
+│  │  React UI           │            │  DeviceService       │    │
+│  │  Zustand Store      │            │   ├─ MockDevice      │    │
+│  │  Canvas Meters      │            │   └─ HIDDevice ──► USB HID│
+│  └─────────────────────┘            └──────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**硬件工程师的交付物**：一个文件 `HIDDeviceService.ts`，实现 `DeviceService` 抽象类。
+不碰 React、不碰 UI、不碰 IPC。
 
 ---
 
-## 2. 通道格式定义
+## 2. 技术决策
 
-设备支持 4 种通道格式，最高 9.1.6（16 通道）：
+| 决策点 | 选择 | 理由 |
+|--------|------|------|
+| 运行环境 | Electron | node-hid 需要 Node.js |
+| Vite 集成 | electron-vite (alex8088) | 分离 main/preload/renderer 配置，支持 native 模块 |
+| 打包工具 | electron-builder | 成熟的 .dmg / .exe 安装包输出 |
+| IPC 方式 | 标准 ipcMain/ipcRenderer | meter 数据量小（~140 bytes/帧 × 30fps），无需 SharedArrayBuffer |
+| 设备抽象 | Abstract Class + EventEmitter | 硬件工程师熟悉的模式，零框架依赖 |
+| 状态管理 | Zustand (selector subscriptions) | 防止 30fps meter 数据触发全局重渲染 |
+| Meter 渲染 | useRef + requestAnimationFrame | meter 数据不走 React state，直写 ref，rAF 读取绘制 |
+| 安全模型 | contextBridge + preload | nodeIntegration=false, contextIsolation=true |
 
-| 格式 | 通道数 | 通道列表 |
-|------|--------|----------|
-| **9.1.6** | 16 | L, R, C, LFE, Ls, Rs, Lrs, Rrs, Lw, Rw, Ltf, Rtf, Ltm, Rtm, Ltr, Rtr |
-| **7.1.4** | 12 | L, R, C, LFE, Ls, Rs, Lrs, Rrs, Ltf, Rtf, Ltr, Rtr |
-| **5.1** | 6 | L, R, C, LFE, Ls, Rs |
-| **Stereo** | 2 | L, R |
+---
 
-**通道编号固定映射**（无论当前格式，编号不变）：
+## 3. DeviceService 接口定义
+
+这是整份文档的核心。硬件工程师实现这个抽象类。
+
+```typescript
+// src/main/device/DeviceService.ts
+
+import { EventEmitter } from 'events';
+
+// ════════════════════════════════════════════
+// 数据类型
+// ════════════════════════════════════════════
+
+export interface MeterData {
+  levels: number[];    // 16 通道电平, dBFS
+  peaks: number[];     // 16 通道 peak hold, dBFS
+  lufs: {
+    m: number;         // Momentary, LUFS
+    s: number;         // Short-term, LUFS
+    i: number;         // Integrated, LUFS
+    tp: number;        // True Peak, dBTP
+  };
+}
+
+export interface DeviceInfo {
+  name: string;              // 如 "TOPPING 16 Mon"
+  firmwareVersion: string;
+  sampleRate: number;        // 44100 / 48000 / 96000 / 192000
+  clockSource: string;       // "Internal" / "USB" / "External"
+}
+
+export type ConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'error';
+
+// Source / Output / Channel 等业务类型复用现有 types.ts 定义
+
+// ════════════════════════════════════════════
+// 完整设备状态（用于全量同步）
+// ════════════════════════════════════════════
+
+export interface FullDeviceState {
+  info: DeviceInfo;
+  volume: number;            // dB
+  dim: boolean;
+  dimAmount: number;         // dB
+  mute: boolean;
+  sources: Source[];
+  activeSourceIds: string[];
+  sourceLocks: Record<string, boolean>;
+  outputs: Output[];
+  activeOutputId: string;
+  refPresets: { id: string; name: string; level: number }[];
+  meterSource: {
+    type: 'FOLLOW_INPUT' | 'FOLLOW_OUTPUT' | 'SPECIFIC';
+    id?: string;
+  };
+}
+
+// ════════════════════════════════════════════
+// 抽象类
+// ════════════════════════════════════════════
+
+export abstract class DeviceService extends EventEmitter {
+
+  // ── 生命周期 ──
+  abstract connect(): Promise<void>;
+  abstract disconnect(): Promise<void>;
+  abstract getConnectionState(): ConnectionState;
+
+  // ── 全量状态同步（上电/重连后调用）──
+  abstract requestFullState(): Promise<FullDeviceState>;
+
+  // ── 全局控制 ──
+  abstract setVolume(db: number): void;
+  abstract setMute(enabled: boolean): void;
+  abstract setDim(enabled: boolean): void;
+
+  // ── Source 管理 ──
+  abstract selectSource(sourceId: string): void;
+  abstract deselectSource(sourceId: string): void;
+  abstract setSourceLock(sourceId: string, locked: boolean): void;
+  abstract updateSource(source: Source): void;
+
+  // ── Output 管理 ──
+  abstract selectOutput(outputId: string): void;
+  abstract updateOutput(output: Output): void;
+
+  // ── 通道参数（寻址: outputId + channelIndex）──
+  abstract setChannelParam(
+    outputId: string,
+    channelIndex: number,
+    param: Partial<OutputChannel>
+  ): void;
+
+  // ── EQ ──
+  abstract setParametricEQ(
+    outputId: string,
+    channelIndex: number,
+    bands: EQBand[]
+  ): void;
+
+  abstract setGraphicEQ(
+    outputId: string,
+    channelIndex: number,
+    values: number[]  // 16 个值
+  ): void;
+
+  // ── Bass Management ──
+  abstract setBassManagement(
+    outputId: string,
+    config: BassManagementConfig
+  ): void;
+
+  // ── Meter 控制 ──
+  abstract setMeterSource(mode: {
+    type: 'FOLLOW_INPUT' | 'FOLLOW_OUTPUT' | 'SPECIFIC';
+    id?: string;
+  }): void;
+
+  // ── Pink Noise ──
+  abstract setPinkNoise(enabled: boolean, level?: number): void;
+  abstract setChannelPinkNoise(channelIndex: number, enabled: boolean): void;
+
+  // ── Ref 预设 ──
+  abstract setRefPreset(id: string, name: string, level: number): void;
+
+  // ════════════════════════════════════════
+  // 事件（设备 → 上位机）
+  // ════════════════════════════════════════
+  //
+  // 'connection'    → (state: ConnectionState)
+  // 'meter-data'    → (data: MeterData)          // 20-50ms 间隔
+  // 'state-changed' → (state: FullDeviceState)   // 设备端参数变更
+  // 'device-info'   → (info: DeviceInfo)
+  // 'error'         → (error: Error)
+}
+```
+
+### 3.1 硬件工程师的实现边界
+
+```
+硬件工程师负责：
+  ✅ HIDDeviceService extends DeviceService
+  ✅ HID 报文编码/解码
+  ✅ USB 设备枚举 (node-hid)
+  ✅ Meter 数据解析并 emit('meter-data', data)
+  ✅ 设备端参数变更时 emit('state-changed', state)
+
+硬件工程师不碰：
+  ❌ React / JSX / Tailwind
+  ❌ Electron IPC / preload
+  ❌ Zustand store
+  ❌ UI 布局和样式
+```
+
+---
+
+## 4. 状态分层
+
+### 4.1 设备状态 → Zustand Store
+
+从 App.tsx 的 `useState` 中提取，通过 DeviceService 读写：
+
+| 状态 | 当前位置 | 说明 |
+|------|----------|------|
+| `sources` | App.tsx:124 | 5 路输入配置 |
+| `activeSourceIds` | App.tsx:127 | 当前选中的 Source |
+| `outputs` | App.tsx:130 | 4 套输出配置 |
+| `activeOutput` | App.tsx:132 | 当前选中的 Output |
+| `mainVolume` | App.tsx:134 | 主音量 |
+| `isDim` | App.tsx:135 | DIM 开关 |
+| `isMute` | App.tsx:136 | MUTE 开关 |
+| `meterValues` | App.tsx:175 | 16 通道电平 |
+| `lufsMeter` | App.tsx:178 | LUFS 数据 |
+| `meterMonitorMode` | App.tsx:153 | Meter 监听源 |
+| `loudnessStandard` | App.tsx:139 | 响度标准选择 |
+| `refPresets` | App.tsx:145 | 参考电平预设 |
+
+### 4.2 UI 状态 → 留在组件 useState
+
+纯界面交互状态，与硬件无关：
+
+| 状态 | 说明 |
+|------|------|
+| `editingSourceId` / `editingOutputId` | 哪个编辑面板打开 |
+| `selectionContext` | 可视化显示 Source 还是 Output |
+| `isLoudnessMenuOpen` / `isMeterMenuOpen` | 下拉菜单展开 |
+| `controlDeckHeight` / `meterBridgeRatio` | 布局尺寸 |
+| `leftSidebarPercent` / `rightSidebarPercent` | 侧栏宽度 |
+| 所有 `isDragging*` ref | 拖拽交互 |
+
+### 4.3 静态常量 → 抽出到 constants/
+
+当前内联在 App.tsx 的常量数据移到独立文件：
+
+| 常量 | 当前位置 | 目标文件 |
+|------|----------|----------|
+| `SPEAKERS_916` | App.tsx:59-91 | `constants/audio.ts` |
+| `CHANNELS_16` | App.tsx:97-114 | `constants/audio.ts` |
+| `FORMAT_CHANNELS` | App.tsx:116-121 | `constants/audio.ts` |
+| `LOUDNESS_STANDARDS` | App.tsx:31-49 | `constants/audio.ts` |
+| `INITIAL_SOURCES` / `MOCK_OUTPUTS` | App.tsx:15-28 | `services/MockDeviceService.ts` |
+
+---
+
+## 5. Meter 数据流
+
+### 5.1 当前问题
+
+存在 **3 处独立的 meter 模拟**：
+- `App.tsx:303-346` — 16 通道 + LUFS 主 meter
+- `SourceStrip.tsx` — 每个 Source 条的 mini meter（独立 setInterval）
+- `OutputStrip.tsx` — 每个 Output 条的 mini meter（独立 setInterval）
+
+这导致数据不一致，且无法统一切换到真实设备数据。
+
+### 5.2 目标架构
+
+```
+DeviceService.emit('meter-data', data)
+        │
+        ▼
+  Electron IPC → Renderer
+        │
+        ▼
+  useRef<MeterData>          ← 不触发 React re-render
+        │
+    ┌───┼───────────┐
+    ▼   ▼           ▼
+  主Meter桥    SourceStrip   OutputStrip
+ (rAF绘制)    (读同一ref)   (读同一ref)
+```
+
+- meter 数据写入 `useRef`，不走 `useState`
+- 所有 meter 组件从同一个 ref 读取，通过 `requestAnimationFrame` 驱动绘制
+- React 不参与 meter 的渲染循环，杜绝 30fps 时的重渲染风暴
+
+---
+
+## 6. Electron 架构
+
+### 6.1 目标文件结构
+
+```
+topping-surround-controller/
+├── electron/
+│   ├── main.ts                    # Electron 主进程入口
+│   ├── preload.ts                 # contextBridge 暴露 API
+│   └── device/
+│       ├── DeviceService.ts       # 抽象类定义
+│       ├── MockDeviceService.ts   # Mock 实现（现有模拟逻辑迁入）
+│       └── HIDDeviceService.ts    # 🔧 硬件工程师实现
+│
+├── src/                           # Renderer（现有前端代码）
+│   ├── App.tsx                    # 瘦化后的主组件
+│   ├── index.tsx
+│   ├── types.ts
+│   ├── constants/
+│   │   └── audio.ts               # 通道/格式/响度标准常量
+│   ├── stores/
+│   │   └── deviceStore.ts         # Zustand device state
+│   ├── hooks/
+│   │   ├── useDevice.ts           # 设备状态 hook
+│   │   └── useMeterData.ts        # Meter ref hook
+│   ├── components/                # 现有组件（改为从 store 读状态）
+│   └── lib/
+│       └── utils.ts
+│
+├── electron-builder.yml
+├── electron.vite.config.ts
+└── package.json
+```
+
+### 6.2 IPC 接口（preload.ts）
+
+```typescript
+// electron/preload.ts
+contextBridge.exposeInMainWorld('electronAPI', {
+  // 命令（Renderer → Main → Device）
+  setVolume:       (db: number)     => ipcRenderer.send('device:cmd', 'setVolume', db),
+  setMute:         (v: boolean)     => ipcRenderer.send('device:cmd', 'setMute', v),
+  setDim:          (v: boolean)     => ipcRenderer.send('device:cmd', 'setDim', v),
+  selectSource:    (id: string)     => ipcRenderer.send('device:cmd', 'selectSource', id),
+  selectOutput:    (id: string)     => ipcRenderer.send('device:cmd', 'selectOutput', id),
+  setChannelParam: (outputId, ch, p)=> ipcRenderer.send('device:cmd', 'setChannelParam', outputId, ch, p),
+  // ... 其余命令同理
+
+  // 事件（Main → Renderer）
+  onMeterData:       (cb) => ipcRenderer.on('device:meters', (_, d) => cb(d)),
+  onConnectionState: (cb) => ipcRenderer.on('device:connection', (_, s) => cb(s)),
+  onFullState:       (cb) => ipcRenderer.on('device:full-state', (_, s) => cb(s)),
+  onDeviceInfo:      (cb) => ipcRenderer.on('device:info', (_, i) => cb(i)),
+
+  // 请求
+  requestFullState: () => ipcRenderer.invoke('device:request-state'),
+});
+```
+
+### 6.3 连接生命周期
+
+```
+启动 → 尝试连接 HIDDeviceService
+         │
+         ├── 成功 → emit('connected') → requestFullState() → 正常运行
+         │
+         └── 3s 无设备 → 自动切换 MockDeviceService → UI 底栏显示 "MOCK"
+                │
+                └── 后台持续轮询 HID.devices()（指数退避，上限 5s）
+                         │
+                         └── 检测到设备 → 切换回 HIDDeviceService → 全量同步
+```
+
+断连时：
+- UI 显示 "未连接" 状态
+- 设备端保持最后工作状态（音频不中断）
+- 自动重连，重连后全量同步
+
+---
+
+## 7. 实现分阶段
+
+### Phase 0 — 架构改造（前端团队，无需硬件）
+
+```
+0.1  搭 Electron 壳 (electron-vite + electron-builder)
+0.2  定义 DeviceService 抽象类
+0.3  实现 MockDeviceService（迁入现有模拟逻辑）
+0.4  建 Zustand store，App.tsx 状态迁移
+0.5  统一 meter 数据源（消灭 3 处独立模拟）
+0.6  Meter 渲染改 useRef + rAF
+0.7  加 IPC 层（preload + contextBridge）
+0.8  验证：Mock 模式下 UI 行为与当前一致
+```
+
+**Phase 0 完成标志**：应用作为 Electron 桌面端运行，Mock 模式下行为与现有 Web 版一致。硬件工程师可以开始接入。
+
+### Phase 1 — 通路验证（硬件工程师介入）
+
+```
+1.1  实现 HIDDeviceService 基础框架
+1.2  设备枚举 + 连接/断连
+1.3  主音量 读/写
+1.4  DIM / MUTE 读/写
+1.5  16 通道 Meter 推送
+1.6  系统信息读取（采样率、版本）
+```
+
+### Phase 2 — Source / Output 切换
+
+```
+2.1  Source 选择 / 多选 / 锁定
+2.2  Source 格式 + 名称 + 输入映射
+2.3  Output 选择 / 格式 + 名称
+```
+
+### Phase 3 — 通道参数
+
+```
+3.1  输出端口映射
+3.2  Trim / Delay / Phase
+3.3  通道 Mute / Solo
+3.4  HPF / LPF
+```
+
+### Phase 4 — DSP 参数
+
+```
+4.1  参量 EQ（8 段 × 16 通道）
+4.2  图示 EQ（16 段 × 16 通道）
+4.3  Bass Management
+```
+
+### Phase 5 — 高级功能
+
+```
+5.1  LUFS 实时数据
+5.2  Meter 监听源切换
+5.3  Pink Noise 发生器
+5.4  参考电平预设
+5.5  全量状态 Dump / Restore
+```
+
+---
+
+## 附录 A：完整参数清单
+
+### A.1 系统信息（只读）
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 设备名称 | string | max 32 char | R |
+| 固件版本 | string | "x.y.z" | R |
+| 采样率 | uint32 | 44100/48000/96000/192000 | R |
+| 时钟源 | enum | Internal/USB/External | R |
+
+### A.2 全局控制
+
+| 参数 | 类型 | 范围 | 步进 | 方向 |
+|------|------|------|------|------|
+| 主音量 | float | -96.0 ~ +12.0 dB | 0.1 dB | R/W |
+| DIM 开关 | bool | on/off | — | R/W |
+| DIM 衰减量 | float | -30.0 ~ -6.0 dB | 0.1 dB | R/W |
+| MUTE 开关 | bool | on/off | — | R/W |
+
+### A.3 Source 输入（5 路）
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 名称 | string | max 16 char | R/W |
+| 格式 | enum | 9.1.6/7.1.4/5.1/Stereo | R/W |
+| 分配状态 | bool | assigned/unassigned | R |
+| 输入映射 | uint8[16] | 物理端口 1-32 | R/W |
+| 当前选中 | uint8[] | 1-5, 支持多选 | R/W |
+| 锁定 | bool × 5 | per source | R/W |
+
+### A.4 Output 输出（4 套）
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 名称 | string | max 16 char | R/W |
+| 格式 | enum | 9.1.6/7.1.4/5.1/Stereo | R/W |
+| 当前选中 | uint8 | 1-4 | R/W |
+
+### A.5 通道参数（16ch × 4 Output）
+
+寻址：Output 编号 + 通道编号
+
+| 参数 | 类型 | 范围 | 步进 | 方向 |
+|------|------|------|------|------|
+| 输出端口映射 | uint8 | 1-32 | — | R/W |
+| Trim | float | -12.0 ~ +12.0 dB | 0.1 dB | R/W |
+| Delay | float | 0 ~ 500.00 ms | 0.01 ms | R/W |
+| Phase 反相 | bool | on/off | — | R/W |
+| Mute | bool | on/off | — | R/W |
+| Solo | bool | on/off | — | R/W |
+| HPF | uint16 | 0=OFF, 20-500 Hz | 1 Hz | R/W |
+| LPF | uint16 | 0=OFF, 1000-20000 Hz | 1 Hz | R/W |
+
+### A.6 参量 EQ（8 段/通道）
+
+| 参数 | 类型 | 范围 | 步进 | 方向 |
+|------|------|------|------|------|
+| Enabled | bool | on/off | — | R/W |
+| Type | enum | peak/lowShelf/highShelf/lowPass/highPass | — | R/W |
+| Frequency | float | 20-20000 Hz | 1 Hz | R/W |
+| Gain | float | -12.0 ~ +12.0 dB | 0.1 dB | R/W |
+| Q | float | 0.10 ~ 10.00 | 0.01 | R/W |
+
+### A.7 图示 EQ（16 段/通道）
+
+| 参数 | 类型 | 范围 | 步进 | 方向 |
+|------|------|------|------|------|
+| Band 1-16 | float[16] | -12.0 ~ +12.0 dB | 0.1 dB | R/W |
+
+频点：25, 40, 63, 100, 160, 250, 400, 630, 1k, 1.6k, 2.5k, 4k, 6.3k, 10k, 16k, 20k Hz
+
+### A.8 Bass Management（每 Output 一个）
+
+**全局**：
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 分频点 | uint16 | 40-200 Hz | R/W |
+| HP 斜率 | enum | 6/12/24 dB/Oct | R/W |
+| LP 斜率 | enum | 6/12/24 dB/Oct | R/W |
+| LFE 滤波开关 | bool | on/off | R/W |
+| LFE 滤波频率 | uint16 | 40-200 Hz | R/W |
+| LFE 滤波斜率 | enum | 12/24 dB/Oct | R/W |
+
+**每通道**：
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| Speaker Size | enum | Large/Small | R/W |
+| Sub 发送 1-4 开关 | bool × 4 | — | R/W |
+| Sub 发送 1-4 电平 | float × 4 | dB | R/W |
+
+**Sub 输出**（最多 4 个）：
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 名称 | string | max 8 char | R/W |
+| 输出端口 | uint8 | 1-32 | R/W |
+| Mute / Solo | bool | — | R/W |
+| Delay | float | 0-500 ms | R/W |
+
+### A.9 Meter 数据（设备推送，只读）
+
+| 数据 | 类型 | 刷新率 |
+|------|------|--------|
+| 16 通道 Level | float[16] | 20-50ms |
+| 16 通道 Peak Hold | float[16] | 20-50ms |
+| LUFS M/S/I/TP | float × 4 | 100ms |
+
+Meter 源选择：
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 监听源 | enum | FOLLOW_INPUT/FOLLOW_OUTPUT/SPECIFIC | R/W |
+| 指定 ID | uint8 | Source 1-5 或 Output 1-4 | R/W |
+
+### A.10 Pink Noise
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 全局开关 | bool | on/off | R/W |
+| 输出电平 | float | -60.0 ~ 0.0 dB | R/W |
+| 每通道发送 | bool × 16 | — | R/W |
+
+### A.11 参考电平预设（3 个）
+
+| 参数 | 类型 | 范围 | 方向 |
+|------|------|------|------|
+| 名称 | string × 3 | max 8 char | R/W |
+| 电平 | float × 3 | -80.0 ~ 0.0 dB | R/W |
+
+---
+
+## 附录 B：通道编号与格式映射
 
 | 编号 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
 |------|---|---|---|---|---|---|---|---|---|----|----|----|----|----|----|-----|
 | 声道 | L | R | C | LFE | Ls | Rs | Lrs | Rrs | Lw | Rw | Ltf | Rtf | Ltm | Rtm | Ltr | Rtr |
-| 分组 | LCR | LCR | LCR | LFE | Surr | Surr | Surr | Surr | Surr | Surr | Height | Height | Height | Height | Height | Height |
 
----
+| 格式 | 使用的通道编号 |
+|------|---------------|
+| 9.1.6 | 1-16（全部） |
+| 7.1.4 | 1-8, 11-12, 15-16 |
+| 5.1 | 1-6 |
+| Stereo | 1-2 |
 
-## 3. 功能域参数清单
+## 附录 C：延迟单位换算
 
-### 3.1 系统信息（只读）
+设备统一使用毫秒，UI 端换算：
 
-| 参数 | 类型 | 范围/枚举 | 方向 | 说明 |
-|------|------|-----------|------|------|
-| 设备名称 | string | max 32 char | R | 固定标识，如 "TOPPING 16 Mon" |
-| 固件版本 | string | "x.y.z" | R | |
-| 采样率 | uint32 | 44100 / 48000 / 96000 / 192000 | R | 当前运行采样率 |
-| 时钟源 | enum | Internal / USB / External | R | 当前时钟锁定状态 |
-| 连接状态 | — | — | R | 上位机通过 USB 连接事件检测 |
+| 显示单位 | 换算 |
+|----------|------|
+| ms | 直接值 |
+| m | ms × 0.343 (声速 343 m/s @ 20°C) |
+| cm | ms × 34.3 |
 
-### 3.2 全局控制
+## 附录 D：UI 区域与参数对照
 
-| 参数 | 类型 | 范围 | 步进 | 方向 | 说明 |
-|------|------|------|------|------|------|
-| 主音量 | float | -96.0 ~ +12.0 dB | 0.1 dB | R/W | 主旋钮控制 |
-| DIM 开关 | bool | on / off | — | R/W | 快速衰减 |
-| DIM 衰减量 | float | -30.0 ~ -6.0 dB | 0.1 dB | R/W | DIM 时的衰减幅度 |
-| MUTE 开关 | bool | on / off | — | R/W | 全局静音 |
-
-### 3.3 Source 输入管理（5 路）
-
-每个 Source 槽位的参数：
-
-| 参数 | 类型 | 范围 | 方向 | 说明 |
-|------|------|------|------|------|
-| 名称 | string | max 16 char | R/W | 用户自定义，如 "Source A" |
-| 格式 | enum | 9.1.6 / 7.1.4 / 5.1 / Stereo | R/W | 决定活跃通道数 |
-| 分配状态 | bool | assigned / unassigned | R | 此槽位是否有有效物理输入 |
-| 输入映射 | uint8[16] | 物理输入端口号 1-32 | R/W | 每个声道映射到哪个物理输入端口 |
-
-全局 Source 选择状态：
-
-| 参数 | 类型 | 范围 | 方向 | 说明 |
-|------|------|------|------|------|
-| 当前选中 Source | uint8[] | 1-5，支持多选 | R/W | 哪些 Source 被激活 |
-| Source 锁定 | bool × 5 | per source | R/W | 多选锁定标记（锁定的 source 切换时保留） |
-
-### 3.4 Output 输出管理（4 套）
-
-每套 Output 配置的参数：
-
-| 参数 | 类型 | 范围 | 方向 | 说明 |
-|------|------|------|------|------|
-| 名称 | string | max 16 char | R/W | 如 "Main"、"Alt 1" |
-| 格式 | enum | 9.1.6 / 7.1.4 / 5.1 / Stereo | R/W | 输出通道格式 |
-| 当前选中 Output | uint8 | 1-4 | R/W | 全局只有一套 Output 激活 |
-
-### 3.5 通道参数（每通道，最多 16ch × 4 套 Output）
-
-寻址方式：**Output 编号（1-4）+ 通道编号（1-16）**
-
-| 参数 | 类型 | 范围 | 步进 | 方向 | 说明 |
-|------|------|------|------|------|------|
-| 输出端口映射 | uint8 | 物理端口号 1-32 | — | R/W | 此声道从哪个物理端口输出 |
-| Trim | float | -12.0 ~ +12.0 dB | 0.1 dB | R/W | 电平微调 |
-| Delay | float | 0 ~ 500.00 ms | 0.01 ms | R/W | 延迟补偿（UI 可显示为 m 或 cm，换算在上位机） |
-| Phase 反相 | bool | on / off | — | R/W | 180° 极性翻转 |
-| Mute | bool | on / off | — | R/W | 单通道静音 |
-| Solo | bool | on / off | — | R/W | 单通道独奏（设备端需实现 solo 互斥逻辑） |
-| HPF 频率 | uint16 | 0 = OFF, 20-500 Hz | 1 Hz | R/W | 高通滤波 |
-| LPF 频率 | uint16 | 0 = OFF, 1000-20000 Hz | 1 Hz | R/W | 低通滤波 |
-
-### 3.6 参量 EQ（每通道最多 8 段）
-
-寻址方式：**Output 编号 + 通道编号 + EQ Band 编号（1-8）**
-
-| 参数 | 类型 | 范围 | 步进 | 方向 |
-|------|------|------|------|------|
-| Enabled | bool | on / off | — | R/W |
-| Type | enum | peak / lowShelf / highShelf / lowPass / highPass | — | R/W |
-| Frequency | float | 20.0 ~ 20000.0 Hz | 1 Hz | R/W |
-| Gain | float | -12.0 ~ +12.0 dB | 0.1 dB | R/W |
-| Q | float | 0.10 ~ 10.00 | 0.01 | R/W |
-
-### 3.7 图示 EQ（每通道 16 段固定频点）
-
-寻址方式：**Output 编号 + 通道编号**（一次传 16 个值）
-
-| 参数 | 类型 | 范围 | 步进 | 方向 |
-|------|------|------|------|------|
-| Band 1-16 增益 | float[16] | -12.0 ~ +12.0 dB | 0.1 dB | R/W |
-
-固定频点（Hz）：`25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000, 20000`
-
-### 3.8 Bass Management（每套 Output 一个）
-
-寻址方式：**Output 编号**
-
-**全局参数**：
-
-| 参数 | 类型 | 范围 | 步进 | 方向 | 说明 |
-|------|------|------|------|------|------|
-| 分频点 | uint16 | 40-200 Hz | 1 Hz | R/W | 主分频频率 |
-| HP 斜率 | enum | 6 / 12 / 24 dB/Oct | — | R/W | 高通滤波器斜率 |
-| LP 斜率 | enum | 6 / 12 / 24 dB/Oct | — | R/W | 低通滤波器斜率 |
-| LFE 滤波开关 | bool | on / off | — | R/W | LFE 通道独立低通 |
-| LFE 滤波频率 | uint16 | 40-200 Hz | 1 Hz | R/W | LFE 低通截止频率 |
-| LFE 滤波斜率 | enum | 12 / 24 dB/Oct | — | R/W | |
-
-**每通道 Bass 设置**（16 通道）：
-
-| 参数 | 类型 | 范围 | 方向 | 说明 |
-|------|------|------|------|------|
-| Speaker Size | enum | Large / Small | R/W | Large = 全频不分频，Small = 低频发送到 Sub |
-| Sub 发送 1-4 开关 | bool × 4 | per sub | R/W | 是否发送低频到对应 Sub |
-| Sub 发送 1-4 电平 | float × 4 | -inf ~ +12.0 dB | R/W | 发送电平 |
-
-**Sub 输出配置**（最多 4 个 Sub）：
-
-| 参数 | 类型 | 范围 | 方向 |
-|------|------|------|------|
-| Sub 名称 | string | max 8 char | R/W |
-| Sub 输出端口 | uint8 | 物理端口号 1-32 | R/W |
-| Sub Mute | bool | on / off | R/W |
-| Sub Solo | bool | on / off | R/W |
-| Sub Delay | float | 0 ~ 500 ms | R/W |
-
-### 3.9 实时 Meter 数据（只读，设备推送）
-
-**通道电平**（建议 20-50ms 推送间隔）：
-
-| 数据 | 类型 | 单位 | 说明 |
-|------|------|------|------|
-| 16 通道 Level | float[16] | dBFS | 当前 RMS 或 peak 电平 |
-| 16 通道 Peak Hold | float[16] | dBFS | Peak hold 值（设备端维护衰减） |
-
-**LUFS 数据**（建议 100ms 推送间隔）：
-
-| 数据 | 类型 | 单位 | 说明 |
-|------|------|------|------|
-| Momentary (M) | float | LUFS | 400ms 窗口 |
-| Short-term (S) | float | LUFS | 3s 窗口 |
-| Integrated (I) | float | LUFS | 从启动/重置起累计 |
-| True Peak (TP) | float | dBTP | 采样间峰值 |
-
-**Meter 监听源选择**（上位机需要切换 meter 看哪里）：
-
-| 参数 | 类型 | 范围 | 方向 | 说明 |
-|------|------|------|------|------|
-| Meter 源 | enum | FOLLOW_INPUT / FOLLOW_OUTPUT / SPECIFIC | R/W | Meter 跟随逻辑 |
-| Meter 指定 ID | uint8 | Source 1-5 或 Output 1-4 | R/W | SPECIFIC 模式下指定监听哪路 |
-
-### 3.10 Pink Noise 发生器
-
-| 参数 | 类型 | 范围 | 步进 | 方向 |
-|------|------|------|------|------|
-| 全局开关 | bool | on / off | — | R/W |
-| 输出电平 | float | -60.0 ~ 0.0 dB | 0.1 dB | R/W |
-| 每通道发送开关 | bool × 16 | per channel | — | R/W |
-
-### 3.11 参考电平预设（3 个）
-
-| 参数 | 类型 | 范围 | 方向 |
-|------|------|------|------|
-| Ref 1/2/3 名称 | string × 3 | max 8 char | R/W |
-| Ref 1/2/3 电平 | float × 3 | -80.0 ~ 0.0 dB | R/W |
-
----
-
-## 4. 状态同步需求
-
-### 4.1 上电/连接
-
-上位机连接设备后，需要一次性读取全部当前状态：
-- 系统信息（采样率、时钟、版本）
-- 全局控制状态（音量、DIM、MUTE）
-- 所有 Source 配置（5 路）
-- 所有 Output 配置（4 套，含通道参数、EQ、Bass Management）
-- 当前选中的 Source 和 Output
-
-> 硬件工程师决定是一条命令"dump all"还是分域逐个读取。
-
-### 4.2 参数变更
-
-- **上位机 → 设备**：用户在 UI 上改参数，立即发送给设备。设备回 ACK 确认。
-- **设备 → 上位机**：如果设备端有物理旋钮/按钮改了参数，需要主动通知上位机更新 UI。
-
-### 4.3 断连处理
-
-- 上位机检测到 USB 断开后，UI 进入"未连接"状态，所有控件灰显
-- 重新连接后，重新执行 4.1 的全量状态同步
-- 设备端应保持最后的工作状态（断连不影响音频处理）
-
----
-
-## 5. 实现优先级建议
-
-面向硬件工程师的分阶段实现路线：
-
-```
-Phase 1 — 通路验证（最小可用原型）
-  ├── 设备枚举 + 连接/断连检测
-  ├── 系统信息读取（采样率、版本）
-  ├── 主音量 读/写
-  ├── DIM / MUTE 读/写
-  └── 16 通道 Meter 推送
-
-Phase 2 — Source / Output 切换
-  ├── Source 选择 / 多选 / 锁定
-  ├── Source 格式 + 名称 读/写
-  ├── Output 选择
-  └── Output 格式 + 名称 读/写
-
-Phase 3 — 通道参数
-  ├── 输出端口映射 读/写
-  ├── Trim / Delay / Phase 读/写
-  ├── 通道 Mute / Solo 读/写
-  └── HPF / LPF 读/写
-
-Phase 4 — DSP 处理参数
-  ├── 参量 EQ 8 段 读/写
-  ├── 图示 EQ 16 段 读/写
-  └── Bass Management 全部参数
-
-Phase 5 — 高级功能
-  ├── LUFS 实时数据推送
-  ├── Meter 监听源切换
-  ├── Pink Noise 发生器
-  ├── 参考电平预设
-  └── 全量状态 Dump / Restore
-```
-
----
-
-## 附录 A：物理 I/O 端口参考
-
-| 端口类型 | 编号范围 | 说明 |
-|----------|----------|------|
-| 模拟输入 | 1-32 | Source 输入映射可选范围 |
-| 模拟输出 | 1-32 | 通道输出 + Sub 输出可选范围 |
-
-> 实际端口数量根据硬件设计确定，上位机通过系统信息读取可用端口数。
-
-## 附录 B：延迟单位换算（上位机完成）
-
-设备端统一存储和传输毫秒值，UI 端负责单位换算显示：
-
-| 单位 | 换算公式 | 说明 |
-|------|----------|------|
-| ms | 直接值 | 设备传输单位 |
-| m | ms × 0.343 | 声速 343 m/s @ 20°C |
-| cm | ms × 34.3 | |
-
-## 附录 C：前端 UI 与参数对应关系
-
-供硬件工程师理解每个参数在 UI 上的位置：
-
-| UI 区域 | 涉及参数域 |
+| UI 区域 | 对应参数域 |
 |---------|-----------|
-| 顶栏 | 系统信息（采样率、时钟、设备名） |
-| 左侧栏 Source Strip | Source 管理（选择、锁定、格式、名称） |
-| 右侧栏 Output Strip | Output 管理（选择、格式、名称） |
-| 中央 Monitor Level | 全局控制（主音量、DIM、MUTE、Ref 预设） |
-| 中央 Meter Bridge | Meter 数据（16ch Level + LUFS） |
-| 中央 3D Visualizer | 通道参数（Mute/Solo 状态反映在扬声器亮灭） |
-| Source 编辑面板 | Source 输入映射、格式、名称 |
-| Output 编辑面板 > Channel Routing | 通道参数全部 |
-| Output 编辑面板 > Parametric EQ | 参量 EQ |
-| Output 编辑面板 > Graphic EQ | 图示 EQ |
-| Output 编辑面板 > Bass Management | Bass Management 全部 |
+| 顶栏 | 系统信息（A.1） |
+| 左侧栏 Source Strip | Source 管理（A.3） |
+| 右侧栏 Output Strip | Output 管理（A.4） |
+| 中央 Monitor Level | 全局控制（A.2）+ Ref 预设（A.11） |
+| 中央 Meter Bridge | Meter 数据（A.9） |
+| 中央 3D Visualizer | 通道 Mute/Solo 状态映射 |
+| Source 编辑面板 | Source 输入映射、格式 |
+| Output > Channel Routing | 通道参数（A.5） |
+| Output > Parametric EQ | 参量 EQ（A.6） |
+| Output > Graphic EQ | 图示 EQ（A.7） |
+| Output > Bass Management | Bass Management（A.8） |
