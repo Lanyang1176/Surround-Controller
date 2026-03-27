@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Output } from '../types';
 import { Settings, ChevronDown, Speaker, Power } from 'lucide-react';
 
@@ -62,33 +62,8 @@ export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSe
   const channelCount = getChannelCount(output.format);
   const theme = THEMES[output.color] || THEMES['cyan'];
 
-  // Meter Simulation
-  const [meterLevels, setMeterLevels] = useState<number[]>([]);
-  useEffect(() => {
-    // Only animate meters if selected to save resources, or keep them quiet if not active
-    if (!selected) {
-      setMeterLevels(new Array(channelCount).fill(0));
-      return;
-    }
-
-    // Initialize
-    setMeterLevels(new Array(channelCount).fill(0));
-
-    const interval = setInterval(() => {
-      const hasSignal = selected && !isMuted; // Simulate signal when selected AND not muted
-      if (hasSignal) {
-        setMeterLevels(prev => Array.from({ length: channelCount }).map((_, i) => {
-          // Slightly different logic than source to look distinct
-          const base = Math.random() * 40 + 40;
-          const boost = (Math.random() > 0.8) ? 20 : 0;
-          return Math.min(105, base + boost);
-        }));
-      } else {
-        setMeterLevels(new Array(channelCount).fill(0));
-      }
-    }, 80);
-    return () => clearInterval(interval);
-  }, [channelCount, selected, isMuted]);
+  // Meter levels — will receive real data via props in a later phase
+  const [meterLevels] = useState<number[]>(new Array(channelCount).fill(0));
 
   return (
     <div

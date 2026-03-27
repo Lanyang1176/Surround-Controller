@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Source } from '../types';
 import { Settings, Lock, LockOpen, ChevronDown, CircleDot, ArrowRightCircle } from 'lucide-react';
 import { Knob } from './Knob';
@@ -88,25 +88,8 @@ export const SourceStrip: React.FC<SourceStripProps> = ({ source, selected, isEd
     const themeName = !isHexColor ? source.color : 'amber';
     const theme = THEMES[themeName] || THEMES['amber'];
 
-    // Meter Simulation
-    const [meterLevels, setMeterLevels] = useState<number[]>([]);
-    useEffect(() => {
-        if (!source.assigned) return;
-        setMeterLevels(new Array(channelCount).fill(0));
-        const interval = setInterval(() => {
-            const hasSignal = source.active || selected;
-            if (hasSignal) {
-                setMeterLevels(prev => Array.from({ length: channelCount }).map((_, i) => {
-                    const base = Math.random() * 50 + 30;
-                    const boost = (Math.random() > 0.8) ? 30 : 0;
-                    return Math.min(105, base + boost + (i < 3 ? 10 : 0));
-                }));
-            } else {
-                setMeterLevels(new Array(channelCount).fill(0));
-            }
-        }, 80);
-        return () => clearInterval(interval);
-    }, [channelCount, source.active, selected, source.assigned]);
+    // Meter levels — will receive real data via props in a later phase
+    const [meterLevels] = useState<number[]>(new Array(channelCount).fill(0));
 
     // UNASSIGNED STATE
     if (!source.assigned) {

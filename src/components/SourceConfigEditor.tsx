@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Source, Speaker } from '../types';
 import { Settings, X, ChevronDown, Activity, Power, Mic2, Save } from 'lucide-react';
 import { Knob } from './Knob';
@@ -90,7 +90,7 @@ export const SourceConfigEditor: React.FC<SourceConfigEditorProps> = ({ source, 
     const [themeColor, setThemeColor] = useState(() => getInitialThemeColor(source.color));
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [channelConfig, setChannelConfig] = useState(() => getInitialChannels(source.format));
-    const [meterLevels, setMeterLevels] = useState<number[]>(new Array(16).fill(0));
+    const [meterLevels] = useState<number[]>(new Array(16).fill(0));
     const [hoveredSpeaker, setHoveredSpeaker] = useState<string | null>(null);
 
     const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
@@ -137,13 +137,7 @@ export const SourceConfigEditor: React.FC<SourceConfigEditorProps> = ({ source, 
         }
     };
 
-    // Simulated Metering
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setMeterLevels(prev => prev.map(() => Math.random() * 60 - 60));
-        }, 100);
-        return () => clearInterval(interval);
-    }, []);
+    // Meter levels — will receive real data in a later phase (static zeros for now)
 
     const handleSpeakerClick = (speakerId: string, mode: 'SOLO' | 'MUTE') => {
         // Interaction Update: Click ONLY selects the channel (Edit Focus)
