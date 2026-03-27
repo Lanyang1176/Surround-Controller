@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* === Studio Color System === */
+/* 降低对比度的深蓝灰色调配色方案 */
+:root {
+  /* 背景层次 - 从最深到最浅 */
+  --bg-deepest: #08090c;
+  --bg-deep: #0c0d11;
+  --bg-base: #0f1014;
+  --bg-elevated: #111216;
+  --bg-surface: #151619;
+  --bg-hover: #1a1b1f;
+
+  /* 边框 */
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-default: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  /* 文字 */
+  --text-primary: #d4d4d8;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-dim: #52525b;
+
+  /* 强调色 - 提升饱和度用于荧光效果 */
+  --accent-cyan: #00d4ff;
+  --accent-cyan-dim: #1a8a9c;
+  --accent-amber: #ffaa00;
+  --accent-amber-dim: #a66d0c;
+  --accent-emerald: #00e890;
+  --accent-emerald-dim: #0c7a56;
+  --accent-red: #ff3b3b;
+  --accent-red-dim: #b91c1c;
+
+  /* 面板特效 */
+  --panel-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --inset-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* Custom scrollbar for a cleaner pro-audio look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-elevated);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow: hidden;
+  /* App-like feel */
+  user-select: none;
+  /* Disable text selection for app-like drag experience */
+  -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Utility for glass/hardware feel */
+.hardware-surface {
+  background: linear-gradient(145deg, #1c1d21, #131417);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--panel-shadow);
+}
+
+.screen-surface {
+  background: var(--bg-deepest);
+  box-shadow: var(--inset-shadow);
+}
+
+.led-text {
+  text-shadow: 0 0 5px currentColor;
+}
+
+/* 编辑模式滑入动画 */
+@keyframes slideInFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-left {
+  animation: slideInFromLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideInFromRight {
+  0% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInFromRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 编辑器层级阴影 - 增强版（左侧） */
+.editor-panel-shadow {
+  box-shadow:
+    -40px 0 80px rgba(0, 0, 0, 0.9),
+    -15px 0 40px rgba(0, 0, 0, 0.7),
+    0 0 100px rgba(0, 0, 0, 0.5);
+}
+
+/* 编辑器层级阴影 - 增强版（右侧） */
+.editor-panel-shadow-right {
+  box-shadow:
+    40px 0 80px rgba(0, 0, 0, 0.9),
+    15px 0 40px rgba(0, 0, 0, 0.7),
+    0 0 100px rgba(0, 0, 0, 0.5);
+}
+
+
+/* 编辑器左边界线 - 柔和版 */
+.editor-left-border {
+  border-left: 2px solid var(--editor-color-soft, rgba(245, 158, 11, 0.5));
+  box-shadow: -2px 0 15px var(--editor-color-alpha, rgba(245, 158, 11, 0.15));
+}
+
+/* 编辑器右边界线 - 镜像版 */
+.editor-right-border {
+  border-right: 2px solid var(--editor-color-soft, rgba(6, 182, 212, 0.5));
+  box-shadow: 2px 0 15px var(--editor-color-alpha, rgba(6, 182, 212, 0.15));
+}
+
+/* 选择框进度条动画 - 平滑填充 */
+@keyframes progressFill {
+  0% {
+    width: 0%;
+  }
+
+  100% {
+    width: 100%;
+  }
+}

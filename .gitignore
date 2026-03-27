@@ -10,7 +10,12 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+out
+release
 *.local
+
+# Vercel
+.vercel
 
 # Editor directories and files
 .vscode/*
