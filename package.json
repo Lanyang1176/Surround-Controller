@@ -16,7 +16,8 @@
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
