@@ -17,30 +17,30 @@ const MOCK_INPUT_CHANNELS = Array.from({ length: 32 }, (_, i) => `Analog Input $
 // Speaker Positions for 9.1.6 (Normalized -1 to 1 for x/y, 0-1+ for z)
 // Optimized vertical spacing for clearer layout
 const SPEAKER_POSITIONS: Record<string, { x: number, y: number, z: number }> = {
-    // Front Row - Pushed forward
-    'L': { x: -0.5, y: -0.85, z: 0 },
-    'R': { x: 0.5, y: -0.85, z: 0 },
+    // Front Row
+    'L': { x: -0.6, y: -0.85, z: 0 },
+    'R': { x: 0.6, y: -0.85, z: 0 },
     'C': { x: 0, y: -0.85, z: 0 },
-    // LFE - Center front
-    'LFE': { x: 0, y: -0.55, z: 0 },
+    // LFE - Off Center front
+    'LFE': { x: 0.35, y: -0.85, z: 0 },
     // Wide - Between front and surround
-    'Lw': { x: -0.9, y: -0.4, z: 0 },
-    'Rw': { x: 0.9, y: -0.4, z: 0 },
+    'Lw': { x: -0.85, y: -0.3, z: 0 },
+    'Rw': { x: 0.85, y: -0.3, z: 0 },
     // Surround - Side position
-    'Ls': { x: -0.95, y: 0.15, z: 0 },
-    'Rs': { x: 0.95, y: 0.15, z: 0 },
+    'Ls': { x: -0.95, y: 0.2, z: 0 },
+    'Rs': { x: 0.95, y: 0.2, z: 0 },
     // Rear Surround - Pushed back
-    'Lrs': { x: -0.65, y: 0.85, z: 0 },
-    'Rrs': { x: 0.65, y: 0.85, z: 0 },
+    'Lrs': { x: -0.7, y: 0.85, z: 0 },
+    'Rrs': { x: 0.7, y: 0.85, z: 0 },
     // Top Front
-    'Ltf': { x: -0.3, y: -0.4, z: 1.2 },
-    'Rtf': { x: 0.3, y: -0.4, z: 1.2 },
+    'Ltf': { x: -0.4, y: -0.4, z: 1.2 },
+    'Rtf': { x: 0.4, y: -0.4, z: 1.2 },
     // Top Middle
-    'Ltm': { x: -0.3, y: 0.15, z: 1.2 },
-    'Rtm': { x: 0.3, y: 0.15, z: 1.2 },
+    'Ltm': { x: -0.5, y: 0.15, z: 1.2 },
+    'Rtm': { x: 0.5, y: 0.15, z: 1.2 },
     // Top Rear
-    'Ltr': { x: -0.3, y: 0.7, z: 1.2 },
-    'Rtr': { x: 0.3, y: 0.7, z: 1.2 }
+    'Ltr': { x: -0.4, y: 0.7, z: 1.2 },
+    'Rtr': { x: 0.4, y: 0.7, z: 1.2 }
 };
 
 // 主题名到 HEX 颜色的映射

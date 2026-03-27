@@ -73,13 +73,15 @@ export const Visualizer: React.FC<VisualizerProps> = ({ speakers, active, contex
         const updateScale = () => {
             if (containerRef.current) {
                 const { width, height } = containerRef.current.getBoundingClientRect();
+
                 // Base width 1280px. Scale dynamically from 0.6 to 2.0 (Supports 4K and small screens)
                 const newScale = Math.min(Math.max(width / 1280, 0.6), 2.0);
                 setUiScale(newScale);
 
                 // World Scale ensures speakers fit dynamically into the available container space
-                const wScale = width / 1000;
-                const hScale = height / 700;
+                // Editor variant has less space, we need a larger relative scale for the speakers to not look tiny
+                const wScale = variant === 'editor' ? width / 500 : width / 1000;
+                const hScale = variant === 'editor' ? height / 400 : height / 700;
                 const newWorldScale = Math.min(Math.max(Math.min(wScale, hScale), 0.35), 2.5);
                 setWorldScale(newWorldScale);
             }

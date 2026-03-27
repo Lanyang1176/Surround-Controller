@@ -821,21 +821,27 @@ const App: React.FC = () => {
                       <div className="flex-1 flex flex-col items-center justify-between py-2 px-4 relative z-10">
 
                         {/* A. Ref Selectors - Segmented Control Style */}
-                        <div className="flex p-0.5 bg-[#08090c]/60 rounded-lg border border-white/[0.06] shadow-inner mb-2">
-                          {refPresets.map((ref) => (
-                            <button
-                              key={ref.id}
-                              onClick={() => setMainVolume((ref.level + 80) * 1.25)}
-                              className={cn(
-                                "px-3 py-1 text-[9px] font-bold rounded-md transition-all",
-                                Math.abs(((mainVolume / 100) * 80 - 80) - ref.level) < 0.5
-                                  ? "bg-[#1a1b1f] text-[#2eb8cc] shadow-sm border border-[#2a2b30]"
-                                  : "bg-[#18181b] border border-[#3f3f46] text-[#a1a1aa] hover:text-[#d4d4d8] hover:border-[#52525b]"
-                              )}>
-
-                              {ref.name}
-                            </button>
-                          ))}
+                        <div className="flex w-full p-1 bg-[#050508] rounded-lg border border-white/[0.02] shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)] mb-2 relative">
+                          {refPresets.map((ref) => {
+                            const isActive = Math.abs(((mainVolume / 100) * 80 - 80) - ref.level) < 0.5;
+                            return (
+                              <button
+                                key={ref.id}
+                                onClick={() => setMainVolume((ref.level + 80) * 1.25)}
+                                className={cn(
+                                  "flex-1 py-1.5 text-[9px] font-bold rounded-md transition-all duration-300 relative",
+                                  isActive
+                                    ? "text-[#2eb8cc] shadow-[0_2px_10px_rgba(46,184,204,0.15)] bg-[#1a1b1f] border border-[#2eb8cc]/20"
+                                    : "text-[#71717a] hover:text-[#a1a1aa] border border-transparent hover:bg-white/[0.02]"
+                                )}>
+                                {/* Active subtle indicator ring */}
+                                {isActive && (
+                                  <div className="absolute inset-0 rounded-md ring-1 ring-[#2eb8cc]/30 ring-inset pointer-events-none mix-blend-screen"></div>
+                                )}
+                                {ref.name}
+                              </button>
+                            );
+                          })}
                         </div>
 
                         {/* B. The Hero Knob */}
@@ -880,41 +886,41 @@ const App: React.FC = () => {
                           <button
                             onClick={() => setIsDim(!isDim)}
                             className={cn(
-                              "h-8 rounded flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 active:scale-[0.95] shadow-lg relative isolate overflow-visible",
+                              "h-9 rounded-lg flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 shadow-lg relative isolate active:scale-[0.98]",
                               isDim
-                                ? "bg-[#d4890f] border-[#b8770d] text-black scale-[1.02]"
-                                : "bg-[#18181b] border-[#3f3f46] text-[#a1a1aa] hover:text-[#d4d4d8] hover:border-[#52525b]"
+                                ? "bg-[#d4890f]/10 border-[#d4890f]/50 text-[#d4890f] shadow-[inset_0_0_12px_rgba(212,137,15,0.15),0_0_10px_rgba(212,137,15,0.1)]"
+                                : "bg-[#08090c] border-white/[0.04] text-[#71717a] hover:text-[#a1a1aa] hover:bg-[#0c0d11]"
                             )}
                           >
                             {/* Breathing Glow - Always rendered, visibility controlled by opacity */}
                             <div
                               className={cn(
-                                "absolute -inset-1 bg-[#d4890f]/40 blur-md rounded -z-10 transition-all duration-500",
-                                isDim ? "opacity-100 scale-100" : "opacity-0 scale-75"
+                                "absolute -inset-1 bg-[#d4890f]/20 blur-xl rounded -z-10 transition-all duration-500",
+                                isDim ? "opacity-100" : "opacity-0"
                               )}
                               style={{ animation: isDim ? 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}
                             ></div>
-                            DIM
+                            <span className={cn("relative z-10 drop-shadow-md", isDim ? "tracking-wider text-[#d4890f]" : "")}>DIM</span>
                           </button>
 
                           <button
                             onClick={() => setIsMute(!isMute)}
                             className={cn(
-                              "h-8 rounded flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 active:scale-[0.95] shadow-lg relative isolate overflow-visible",
+                              "h-9 rounded-lg flex items-center justify-center gap-2 text-[10px] font-bold border transition-all duration-300 shadow-lg relative isolate active:scale-[0.98]",
                               isMute
-                                ? "bg-[#dc2626] border-[#b91c1c] text-white scale-[1.02]"
-                                : "bg-[#18181b] border-[#3f3f46] text-[#a1a1aa] hover:text-[#d4d4d8] hover:border-[#52525b]"
+                                ? "bg-[#dc2626]/10 border-[#dc2626]/50 text-[#dc2626] shadow-[inset_0_0_12px_rgba(220,38,38,0.15),0_0_10px_rgba(220,38,38,0.1)]"
+                                : "bg-[#08090c] border-white/[0.04] text-[#71717a] hover:text-[#a1a1aa] hover:bg-[#0c0d11]"
                             )}
                           >
                             {/* Breathing Glow - Always rendered, visibility controlled by opacity */}
                             <div
                               className={cn(
-                                "absolute -inset-1 bg-[#dc2626]/40 blur-md rounded -z-10 transition-all duration-500",
-                                isMute ? "opacity-100 scale-100" : "opacity-0 scale-75"
+                                "absolute -inset-1 bg-[#dc2626]/20 blur-xl rounded -z-10 transition-all duration-500",
+                                isMute ? "opacity-100" : "opacity-0"
                               )}
                               style={{ animation: isMute ? 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none' }}
                             ></div>
-                            MUTE
+                            <span className={cn("relative z-10 drop-shadow-md", isMute ? "tracking-wider text-[#dc2626]" : "")}>MUTE</span>
                           </button>
                         </div>
 
