@@ -1,0 +1,1 @@
+docs/plans/2026-03-27-hid-interface-spec.md
