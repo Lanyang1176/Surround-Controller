@@ -14,7 +14,7 @@ import { LOUDNESS_STANDARDS, getTargetLufs, SPEAKERS_916, CHANNELS_16, FORMAT_CH
 import {
   useSources, useActiveSourceIds, useOutputs, useActiveOutputId,
   useVolume, useMute, useDim, useLoudnessStandard, useRefPresets,
-  useMeterMonitorMode, useDeviceActions, useDeviceInfo,
+  useMeterMonitorMode, useDeviceActions, useDeviceInfo, useConnectionState,
 } from './hooks/useDevice';
 import { useMeterData } from './hooks/useMeterData';
 
@@ -31,6 +31,7 @@ const App: React.FC = () => {
   const refPresets = useRefPresets();
   const meterMonitorMode = useMeterMonitorMode();
   const { sampleRate, clockSource, deviceName } = useDeviceInfo();
+  const connectionState = useConnectionState();
   const meterRef = useMeterData();
   const actions = useDeviceActions();
 
@@ -838,7 +839,14 @@ const App: React.FC = () => {
 
       <footer className="h-8 bg-[#0c0d11] border-t border-[#1a1b1f] flex items-center justify-between px-4 shrink-0 z-50">
         <div className="flex items-center gap-4 text-[9px] text-[#52525b]">
-          <span>System Status: OK</span>
+          <span className="flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              connectionState === 'connected' ? 'bg-emerald-500 shadow-[0_0_4px_rgba(52,211,153,0.6)]' :
+              connectionState === 'connecting' ? 'bg-amber-500 animate-pulse' :
+              'bg-zinc-600'
+            }`}></span>
+            {connectionState === 'connected' ? 'MOCK' : connectionState.toUpperCase()}
+          </span>
         </div>
         <div className="flex items-center gap-2"></div>
       </footer>
