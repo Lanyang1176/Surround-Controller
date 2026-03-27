@@ -12,6 +12,84 @@
 
 ---
 
+## ⚠️ 评审修复指南（执行前必读）
+
+计划经过专家评审，以下问题已识别。执行者在对应 Task 中需注意：
+
+| # | 严重度 | 涉及 Task | 问题 | 修复方式 |
+|---|--------|-----------|------|----------|
+| 1 | **CRITICAL** | Task 0 (新增) | 当前源码是平铺结构（无 `src/` 目录），但计划假设 `src/` 存在 | **新增 Task 0**：把 App.tsx/index.tsx/types.ts/components/lib/ 移入 `src/`，更新所有内部 import 路径 |
+| 2 | **CRITICAL** | Task 1 Step 7 | `index.html` 移到 `src/` 后 script src 需更新 | `<script src="/index.tsx">` → `<script src="./index.tsx">`，同时移除 importmap 和 CDN tailwind script |
+| 3 | **HIGH** | Task 1 Step 7 | `index.html` 内联 `<style>` 中的 CSS 变量+动画需提取 | 创建 `src/index.css`，内容: `@import "tailwindcss";` + 从 `<style>` 移入的 CSS 变量和动画，`index.html` 改为 `<link rel="stylesheet" href="./index.css">` |
+| 4 | **HIGH** | Task 1 | Google Fonts 从 CDN 加载，Electron 离线不可用 | Phase 0 可接受（开发环境有网），生产打包时需本地化字体。加 TODO 注释 |
+| 5 | **HIGH** | Task 1 Step 2 | Tailwind CDN 是 v3，`@tailwindcss/vite` 是 v4，有 breaking changes | **改用 Tailwind v3**：`npm install -D tailwindcss postcss autoprefixer`，用 PostCSS 插件而非 Vite 插件。CSS 入口用 `@tailwind base; @tailwind components; @tailwind utilities;` |
+| 6 | **HIGH** | Task 1 | 旧 `vite.config.ts` 需删除/重命名，否则与 `electron.vite.config.ts` 冲突 | 在 Step 6 后加步骤：`rm vite.config.ts` |
+| 7 | **HIGH** | Task 1 | `tsconfig.json` 的 `paths` 需更新 | 加步骤：`"@/*": ["./src/*"]`，`include` 加 `"src"` 和 `"electron"` |
+| 8 | **HIGH** | Task 3, 4, 9 | `electron/device/` 中 import `../../src/types` 跨越 electron-vite 构建边界 | 创建 `shared/types.ts` 导出业务类型，`electron/` 和 `src/` 都从 `shared/` import。或把 `FORMAT_CHANNELS` / `CHANNELS_16` 在 MockDeviceService 中内联（避免跨边界 import 常量） |
+| 9 | **MEDIUM** | Task 5 | `sourceLocks` 用 `Record<string, boolean>` 但代码用 `Source.locked` 属性 | `applyFullState` 中合并：`sources: state.sources.map(s => ({...s, locked: state.sourceLocks?.[s.id] ?? s.locked}))` |
+| 10 | **MEDIUM** | Task 7 | `mainVolume` 当前是 0-100，store 用 dB（-96~+12） | Knob 组件已有 `min`/`max` props，迁移时 Knob 直接传 dB 值。删除 `(mainVolume / 100) * 80 - 80` 转换，直接用 `volume`。Ref preset 匹配也简化为 `Math.abs(volume - ref.level) < 0.5` |
+| 11 | **MEDIUM** | Task 7 Step 2 | `handleSourceSelect` / `handleOutputSelect` 还设了 `selectionContext` | 替换为包装函数：`(id) => { actions.selectSource(id); setSelectionContext('SOURCE'); }` |
+| 12 | **MEDIUM** | Task 7 | App.tsx 引用 `MOCK_OUTPUTS.find(...)` 但 MOCK_OUTPUTS 已移走 | 替换为 `outputs.find(o => o.id === activeOutput)`（从 store 读） |
+| 13 | **MEDIUM** | Task 8 Step 2 | meter snapshot 缺少 LUFS 数据 | snapshot 需包含 lufs：`{ levels, peaks, lufs: meterRef.current.lufs }` |
+| 14 | **LOW** | Task 7 | `getActiveChannelIds()` 函数留在 App.tsx 还是移走 | 保留在 App.tsx 作为 derived state（纯计算，不是设备状态） |
+
+---
+
+## Task 0: 目录结构迁移（前置步骤）
+
+**Files:**
+- Move: `App.tsx` → `src/App.tsx`
+- Move: `index.tsx` → `src/index.tsx`
+- Move: `types.ts` → `src/types.ts`
+- Move: `components/` → `src/components/`
+- Move: `lib/` → `src/lib/`
+- Create: `shared/types.ts`
+
+- [ ] **Step 1: 创建 src/ 目录并移动源码**
+
+```bash
+mkdir -p src
+mv App.tsx index.tsx types.ts src/
+mv components/ src/components/
+mv lib/ src/lib/
+```
+
+- [ ] **Step 2: 创建 shared/types.ts（跨进程共享类型）**
+
+从 `src/types.ts` 中提取 `electron/` 需要的类型到 `shared/types.ts`（Source, Output, OutputChannel, EQBand, BassManagementConfig, Speaker 等），`src/types.ts` 改为 re-export：
+
+```typescript
+// shared/types.ts
+export interface Source { /* 完整定义 */ }
+export interface Output { /* 完整定义 */ }
+// ... 其他业务类型
+
+// src/types.ts
+export * from '../shared/types';
+// ... 保留 src 特有的类型和工具函数（delayConvert 等）
+```
+
+- [ ] **Step 3: 更新所有内部 import 路径**
+
+由于文件层级没变（组件间相对路径不变），大部分 import 无需改动。但 `App.tsx` 中对 `./lib/utils` 和 `./components/*` 的引用路径不变，无需修改。
+
+- [ ] **Step 4: 验证**
+
+```bash
+npx vite build
+```
+
+Expected: 编译成功（还在用旧 vite.config.ts，移入 src/ 后需确认入口路径）
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "refactor: move source files into src/ for electron-vite structure"
+```
+
+---
+
 ## 文件结构
 
 完成后的新增/修改文件：
@@ -348,8 +426,10 @@ git commit -m "refactor: extract audio constants from App.tsx"
 
 ```typescript
 import { EventEmitter } from 'events';
-import type { Source, Output, OutputChannel, EQBand, BassManagementConfig } from '../../src/types';
+import type { Source, Output, OutputChannel, EQBand, BassManagementConfig } from '../../shared/types';
 ```
+
+> **注意**：import 路径指向 `shared/types.ts`（Task 0 创建），不要从 `src/` 跨边界 import。
 
 - [ ] **Step 2: Commit**
 
@@ -374,8 +454,21 @@ git commit -m "feat: define DeviceService abstract class"
 
 ```typescript
 import { DeviceService, MeterData, FullDeviceState, ConnectionState, DeviceInfo } from './DeviceService';
-import type { Source, Output } from '../../src/types';
-import { FORMAT_CHANNELS, CHANNELS_16 } from '../../src/constants/audio';
+import type { Source, Output } from '../../shared/types';
+
+// 注意：FORMAT_CHANNELS / CHANNELS_16 在此文件内联定义（避免跨 electron-vite 构建边界 import）
+// 与 src/constants/audio.ts 中的定义保持一致
+const FORMAT_CHANNELS: Record<string, string[]> = {
+  '9.1.6': ['L','R','C','LFE','Ls','Rs','Lrs','Rrs','Lw','Rw','Ltf','Rtf','Ltm','Rtm','Ltr','Rtr'],
+  '7.1.4': ['L','R','C','LFE','Ls','Rs','Lrs','Rrs','Ltf','Rtf','Ltr','Rtr'],
+  '5.1': ['L','R','C','LFE','Ls','Rs'],
+  'Stereo': ['L','R'],
+};
+
+const CHANNELS_16 = [
+  {id:'L'},{id:'R'},{id:'C'},{id:'LFE'},{id:'Ls'},{id:'Rs'},{id:'Lrs'},{id:'Rrs'},
+  {id:'Lw'},{id:'Rw'},{id:'Ltf'},{id:'Rtf'},{id:'Ltm'},{id:'Rtm'},{id:'Ltr'},{id:'Rtr'},
+];
 
 const INITIAL_SOURCES: Source[] = [
   // ... 从 App.tsx:15-21 复制
@@ -1109,7 +1202,7 @@ git commit -m "refactor: unify meter data source, remove 4 independent simulatio
 
 ```typescript
 import { DeviceService, ConnectionState, FullDeviceState } from './DeviceService';
-import type { Source, Output, OutputChannel, EQBand, BassManagementConfig } from '../../src/types';
+import type { Source, Output, OutputChannel, EQBand, BassManagementConfig } from '../../shared/types';
 
 /**
  * 硬件 HID 设备服务 — 硬件工程师在此实现
