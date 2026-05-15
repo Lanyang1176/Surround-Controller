@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Output } from '../types';
 import { Settings, ChevronDown, Speaker, Power } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface OutputStripProps {
   onSettingsClick?: () => void;
   isMuted?: boolean;
   isEditing?: boolean;
+  meterLevels?: number[];
 }
 
 const getChannelCount = (format: string) => {
@@ -58,12 +59,11 @@ const THEMES: Record<string, any> = {
   },
 };
 
-export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSelect, onSettingsClick, isMuted }) => {
+export const OutputStrip: React.FC<OutputStripProps> = ({ output, selected, onSelect, onSettingsClick, isMuted, meterLevels: meterLevelsProp }) => {
   const channelCount = getChannelCount(output.format);
   const theme = THEMES[output.color] || THEMES['cyan'];
 
-  // Meter levels — will receive real data via props in a later phase
-  const [meterLevels] = useState<number[]>(new Array(channelCount).fill(0));
+  const meterLevels = isMuted ? new Array(channelCount).fill(0) : meterLevelsProp ?? new Array(channelCount).fill(0);
 
   return (
     <div

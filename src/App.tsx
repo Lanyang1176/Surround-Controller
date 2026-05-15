@@ -282,6 +282,14 @@ const App: React.FC = () => {
     };
   }).filter((item): item is (typeof CHANNELS_16[0] & { originalIndex: number }) => item !== null);
 
+  const getStripMeterLevels = (format: string, gain = 1) => {
+    const channelIds = FORMAT_CHANNELS[format] || FORMAT_CHANNELS['9.1.6'];
+    return channelIds.map((channelId) => {
+      const index = CHANNELS_16.findIndex(c => c.id === channelId);
+      return Math.round((meterSnapshot.levels[index] ?? 0) * gain);
+    });
+  };
+
   // Calculate speakers for Visualizer
   const currentSpeakers = SPEAKERS_916.filter(spk => visualizerChannels.includes(spk.id));
 
@@ -343,6 +351,7 @@ const App: React.FC = () => {
                     selected={activeSourceIds.includes(src.id)}
                     isEditing={editingSourceId === src.id}
                     showTrim={showTrimKnob}
+                    meterLevels={getStripMeterLevels(src.format, activeSourceIds.includes(src.id) ? 1 : 0.28)}
                     onSelect={handleSourceSelect}
                     onToggleLock={actions.toggleSourceLock}
                     onSettingsClick={() => setEditingSourceId(src.id)}
@@ -816,6 +825,7 @@ const App: React.FC = () => {
                     onSettingsClick={() => setEditingOutputId(out.id)}
                     isMuted={isMute}
                     isEditing={editingOutputId === out.id}
+                    meterLevels={getStripMeterLevels(out.format, activeOutput === out.id ? 0.95 : 0.22)}
                   />
                 </div>
               ))}

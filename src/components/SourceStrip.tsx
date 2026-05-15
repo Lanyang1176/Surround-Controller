@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Source } from '../types';
 import { Settings, Lock, LockOpen, ChevronDown, CircleDot, ArrowRightCircle } from 'lucide-react';
 import { Knob } from './Knob';
@@ -8,6 +8,7 @@ interface SourceStripProps {
     selected: boolean;
     isEditing?: boolean; // 是否正在编辑此 Source
     showTrim?: boolean;
+    meterLevels?: number[];
     onSelect: (id: string) => void;
     onToggleLock: (id: string) => void;
     onSettingsClick: () => void;
@@ -78,7 +79,7 @@ const THEMES: Record<string, any> = {
     }
 };
 
-export const SourceStrip: React.FC<SourceStripProps> = ({ source, selected, isEditing, showTrim = true, onSelect, onToggleLock, onSettingsClick }) => {
+export const SourceStrip: React.FC<SourceStripProps> = ({ source, selected, isEditing, showTrim = true, meterLevels: meterLevelsProp, onSelect, onToggleLock, onSettingsClick }) => {
     const channelCount = getChannelCount(source.format);
     const shouldShowTrim = Boolean(showTrim);
 
@@ -88,8 +89,7 @@ export const SourceStrip: React.FC<SourceStripProps> = ({ source, selected, isEd
     const themeName = !isHexColor ? source.color : 'amber';
     const theme = THEMES[themeName] || THEMES['amber'];
 
-    // Meter levels — will receive real data via props in a later phase
-    const [meterLevels] = useState<number[]>(new Array(channelCount).fill(0));
+    const meterLevels = meterLevelsProp ?? new Array(channelCount).fill(0);
 
     // UNASSIGNED STATE
     if (!source.assigned) {

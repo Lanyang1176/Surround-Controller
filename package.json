@@ -5,9 +5,12 @@
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
+    "dev": "vite --config vite.web.config.ts",
+    "build": "vite --config vite.web.config.ts build",
+    "preview": "vite --config vite.web.config.ts preview",
+    "dev:electron": "electron-vite dev",
+    "build:electron": "electron-vite build",
+    "preview:electron": "electron-vite preview",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },

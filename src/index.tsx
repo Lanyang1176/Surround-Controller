@@ -2,18 +2,27 @@ import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { createMockFullDeviceState } from './dev/mockDevice';
 import { useDeviceStore } from './stores/deviceStore';
 
 function initDeviceBridge() {
-  window.electronAPI?.onFullState((state) => {
+  const api = window.electronAPI;
+  if (!api) {
+    const store = useDeviceStore.getState();
+    store.applyFullState(createMockFullDeviceState());
+    store.setConnectionState('connected');
+    return;
+  }
+
+  api.onFullState((state) => {
     useDeviceStore.getState().applyFullState(state);
   });
 
-  window.electronAPI?.onConnectionState((state) => {
+  api.onConnectionState((state) => {
     useDeviceStore.getState().setConnectionState(state as any);
   });
 
-  window.electronAPI?.requestFullState().then((state) => {
+  api.requestFullState().then((state) => {
     if (state) useDeviceStore.getState().applyFullState(state);
   });
 }

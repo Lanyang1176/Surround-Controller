@@ -1,4 +1,5 @@
 import { useDeviceStore } from '../stores/deviceStore';
+import { useShallow } from 'zustand/react/shallow';
 
 export const useVolume = () => useDeviceStore(s => s.volume);
 export const useMute = () => useDeviceStore(s => s.mute);
@@ -11,13 +12,13 @@ export const useConnectionState = () => useDeviceStore(s => s.connectionState);
 export const useLoudnessStandard = () => useDeviceStore(s => s.loudnessStandard);
 export const useRefPresets = () => useDeviceStore(s => s.refPresets);
 export const useMeterMonitorMode = () => useDeviceStore(s => s.meterMonitorMode);
-export const useDeviceInfo = () => useDeviceStore(s => ({
+export const useDeviceInfo = () => useDeviceStore(useShallow(s => ({
   sampleRate: s.sampleRate,
   clockSource: s.clockSource,
   deviceName: s.deviceName,
-}));
+})));
 
-export const useDeviceActions = () => useDeviceStore(s => ({
+export const useDeviceActions = () => useDeviceStore(useShallow(s => ({
   setVolume: s.setVolume,
   setMute: s.setMute,
   setDim: s.setDim,
@@ -30,4 +31,4 @@ export const useDeviceActions = () => useDeviceStore(s => ({
   setMeterMonitorMode: s.setMeterMonitorMode,
   setLoudnessStandard: s.setLoudnessStandard,
   setRefPreset: s.setRefPreset,
-}));
+})));
