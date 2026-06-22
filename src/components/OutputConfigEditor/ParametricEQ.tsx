@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Trash2, ChevronDown, Power } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -65,11 +66,11 @@ const BAND_COLORS = [
 ];
 
 const FILTER_TYPES = [
-  { value: 'highPass', label: 'High Pass', shortLabel: 'HP' },
+  { value: 'highPass', label: 'Low Cut', shortLabel: 'LC' },
   { value: 'lowShelf', label: 'Low Shelf', shortLabel: 'LS' },
   { value: 'peak', label: 'Bell', shortLabel: 'PK' },
   { value: 'highShelf', label: 'High Shelf', shortLabel: 'HS' },
-  { value: 'lowPass', label: 'Low Pass', shortLabel: 'LP' },
+  { value: 'lowPass', label: 'Hi Cut', shortLabel: 'HC' },
 ] as const;
 
 // 专业对数网格 - 主刻度 (10, 100, 1k, 10k, 20k 等)
@@ -90,8 +91,8 @@ const LOG_MINOR_FREQS = (() => {
   minors.push(20000, 30000);
   return minors;
 })();
-// 合并用于渲染的完整频率刻度
-const ALL_FREQ_GRID_LINES = [...LOG_MAJOR_FREQS, ...LOG_MINOR_FREQS].sort((a, b) => a - b);
+// 合并用于渲染的完整频率刻度 (去重)
+const ALL_FREQ_GRID_LINES = [...new Set([...LOG_MAJOR_FREQS, ...LOG_MINOR_FREQS])].sort((a, b) => a - b);
 
 // 扬声器颜色映射
 const SPEAKER_COLORS: Record<string, string> = {
@@ -118,7 +119,7 @@ const SPEAKER_NAMES: Record<string, string> = {
 // Filter Type Icons (SVG paths)
 // ═══════════════════════════════════════════════════════════════════════
 
-const FilterIcon: React.FC<{ type: EQBand['type']; className?: string; style?: React.CSSProperties }> = ({ type, className = "w-4 h-3", style }) => {
+export const FilterIcon: React.FC<{ type: EQBand['type']; className?: string; style?: React.CSSProperties }> = ({ type, className = "w-4 h-3", style }) => {
   const paths: Record<EQBand['type'], string> = {
     highPass: "M2 10 L5 10 Q7 10 9 6 L14 2",
     lowPass: "M2 2 L7 6 Q9 10 11 10 L14 10",
@@ -152,7 +153,7 @@ interface BandOverviewCardProps {
   onAdjust: (id: string) => void;
 }
 
-const BandOverviewCard: React.FC<BandOverviewCardProps> = ({
+export const BandOverviewCard: React.FC<BandOverviewCardProps> = ({
   band, index, color, isSelected, isHovered, isAdjusting, onClick, onMouseEnter, onMouseLeave, onUpdate, onAdjust
 }) => {
   const isHpLp = band.type === 'highPass' || band.type === 'lowPass';
@@ -241,9 +242,10 @@ const BandOverviewCard: React.FC<BandOverviewCardProps> = ({
 
   return (
     <div
+      onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`flex shrink-0 rounded overflow-hidden border transition-all duration-150 ease-out ${band.enabled
+      className={`flex shrink-0 rounded overflow-hidden border transition-all duration-150 ease-out cursor-pointer ${band.enabled
         ? 'bg-zinc-900/70 hover:bg-zinc-800/70'
         : 'bg-zinc-900/30 opacity-40'
         } ${isSelected ? 'scale-[1.02]' : ''} ${isHovered && !isSelected ? 'scale-[1.01]' : ''}`}
@@ -416,19 +418,25 @@ const calculateBandResponse = (band: EQBand, freq: number): number => {
     }
 
     case 'highPass': {
-      // HP: 截止频率以下衰减到负无穷 (不限制最小值)
-      if (freq >= f0) return 0;
-      const octaves = Math.log2(freq / f0);
-      const slope = 12 * Q;
-      return octaves * slope;  // 允许返回 -100dB 或更低
+      // 二阶高通传递函数: |H(jw)|^2 = w^4 / ((1-w^2)^2 + (w/Q)^2)
+      // Q=0.707 → Butterworth (平坦通带, -3dB@fc, 12dB/oct)
+      // Q>0.707 → 截止频率处谐振峰
+      const w = freq / f0;
+      const w2 = w * w;
+      const den = (1 - w2) * (1 - w2) + (w / Q) * (w / Q);
+      if (den < 1e-10) return 0;
+      const mag2 = (w2 * w2) / den;
+      return 10 * Math.log10(Math.max(mag2, 1e-10));
     }
 
     case 'lowPass': {
-      // LP: 截止频率以上衰减到负无穷 (不限制最小值)
-      if (freq <= f0) return 0;
-      const octaves = Math.log2(freq / f0);
-      const slope = 12 * Q;
-      return -octaves * slope;  // 允许返回 -100dB 或更低
+      // 二阶低通传递函数: |H(jw)|^2 = 1 / ((1-w^2)^2 + (w/Q)^2)
+      const w = freq / f0;
+      const w2 = w * w;
+      const den = (1 - w2) * (1 - w2) + (w / Q) * (w / Q);
+      if (den < 1e-10) return 0;
+      const mag2 = 1 / den;
+      return 10 * Math.log10(Math.max(mag2, 1e-10));
     }
 
     default:
@@ -594,7 +602,7 @@ interface VectorKnobProps {
   disabled?: boolean;
 }
 
-const VectorKnob: React.FC<VectorKnobProps> = ({
+export const VectorKnob: React.FC<VectorKnobProps> = ({
   value, min, max, step = 0.1, label, unit = '', format, parse, onChange, color, size = 52, disabled = false
 }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -820,6 +828,7 @@ export const ParametricEQ: React.FC<ParametricEQProps> = ({
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragArmed, setDragArmed] = useState<{ id: string; x: number; y: number } | null>(null);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
+  const [typeMenuPos, setTypeMenuPos] = useState({ left: 0, bottom: 0 });
   const [showBandMenu, setShowBandMenu] = useState(false);
   const [hoveredBandId, setHoveredBandId] = useState<string | null>(null);
   const [adjustingBandId, setAdjustingBandId] = useState<string | null>(null);
@@ -1747,7 +1756,7 @@ export const ParametricEQ: React.FC<ParametricEQProps> = ({
               {pointerFreq && (
                 <g
                   transform={`translate(${padding.left + freqToX(pointerFreq, plotWidth)}, ${padding.top + plotHeight - 8})`}
-                  style={{ transition: 'transform 0.06s linear' }} // 微妙的跟手延迟
+                  style={{ willChange: 'transform' }} // 直接跟手，无延迟
                 >
                   {/* 计算光标颜色：拖拽 > 选中 > 悬停 > 默认白 */}
                   {(() => {
@@ -2174,7 +2183,10 @@ export const ParametricEQ: React.FC<ParametricEQProps> = ({
                 {/* Type Selector - Stealth Capsule */}
                 <div className="relative group/type">
                   <button
-                    onClick={() => {
+                    ref={(el) => { if (el) (el as any)._typeMenuAnchor = el; }}
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setTypeMenuPos({ left: rect.left, bottom: window.innerHeight - rect.top + 8 });
                       setShowTypeMenu(!showTypeMenu);
                       setShowBandMenu(false);
                     }}
@@ -2186,12 +2198,13 @@ export const ParametricEQ: React.FC<ParametricEQProps> = ({
                     <ChevronDown size={12} className="text-zinc-500 group-hover/type:text-zinc-300 transition-colors" />
                   </button>
 
-                  {/* 弹出菜单 */}
-                  {showTypeMenu && (
+                  {/* 弹出菜单 - Portal 到 body 避免被 backdrop-filter 的 containing block 截断 */}
+                  {showTypeMenu && createPortal(
                     <>
                       <div className="fixed inset-0 z-[100]" onClick={() => setShowTypeMenu(false)} />
                       <div
-                        className="absolute bottom-full left-0 mb-2 bg-zinc-900/95 backdrop-blur-xl rounded-xl border border-zinc-800/80 shadow-2xl z-[101] overflow-hidden min-w-[120px]"
+                        className="fixed bg-zinc-900/95 backdrop-blur-xl rounded-xl border border-zinc-800/80 shadow-2xl z-[101] overflow-hidden min-w-[120px]"
+                        style={{ left: typeMenuPos.left, bottom: typeMenuPos.bottom }}
                       >
                         {FILTER_TYPES.map(type => (
                           <button
@@ -2205,7 +2218,8 @@ export const ParametricEQ: React.FC<ParametricEQProps> = ({
                           </button>
                         ))}
                       </div>
-                    </>
+                    </>,
+                    document.body
                   )}
                 </div>
               </div>

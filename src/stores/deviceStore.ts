@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Source, Output } from '../../shared/types';
+import type { Source, Output } from '../types';
 
 export interface MeterMonitorMode {
   type: 'FOLLOW_INPUT' | 'FOLLOW_OUTPUT' | 'SPECIFIC';
@@ -48,10 +48,6 @@ interface DeviceActions {
   setRefPreset: (id: string, name: string, level: number) => void;
 }
 
-const sendCmd = (command: string, ...args: any[]) => {
-  window.electronAPI?.sendCommand(command, ...args);
-};
-
 export const useDeviceStore = create<DeviceState & DeviceActions>()(
   subscribeWithSelector((set, get) => ({
     connectionState: 'disconnected',
@@ -92,16 +88,15 @@ export const useDeviceStore = create<DeviceState & DeviceActions>()(
 
     setConnectionState: (cs) => set({ connectionState: cs }),
 
-    setVolume: (db) => { set({ volume: db }); sendCmd('setVolume', db); },
-    setMute: (m) => { set({ mute: m }); sendCmd('setMute', m); },
-    setDim: (d) => { set({ dim: d }); sendCmd('setDim', d); },
+    setVolume: (db) => { set({ volume: db }); },
+    setMute: (m) => { set({ mute: m }); },
+    setDim: (d) => { set({ dim: d }); },
 
     selectSource: (id) => {
       const { activeSourceIds, sources } = get();
       if (activeSourceIds.includes(id)) {
         // Already active -- deselect
         set({ activeSourceIds: activeSourceIds.filter(sid => sid !== id) });
-        sendCmd('deselectSource', id);
         return;
       }
       const locked = activeSourceIds.filter(sid => {
@@ -109,12 +104,10 @@ export const useDeviceStore = create<DeviceState & DeviceActions>()(
         return s?.locked;
       });
       set({ activeSourceIds: [...locked, id] });
-      sendCmd('selectSource', id);
     },
 
     deselectSource: (id) => {
       set(s => ({ activeSourceIds: s.activeSourceIds.filter(sid => sid !== id) }));
-      sendCmd('deselectSource', id);
     },
 
     toggleSourceLock: (id) => {
@@ -123,30 +116,25 @@ export const useDeviceStore = create<DeviceState & DeviceActions>()(
           src.id === id ? { ...src, locked: !src.locked } : src
         ),
       }));
-      const source = get().sources.find(s => s.id === id);
-      sendCmd('setSourceLock', id, source?.locked ?? false);
     },
 
-    selectOutput: (id) => { set({ activeOutputId: id }); sendCmd('selectOutput', id); },
+    selectOutput: (id) => { set({ activeOutputId: id }); },
 
     updateSource: (source) => {
       set(s => ({ sources: s.sources.map(src => src.id === source.id ? source : src) }));
-      sendCmd('updateSource', source);
     },
 
     updateOutput: (output) => {
       set(s => ({ outputs: s.outputs.map(o => o.id === output.id ? output : o) }));
-      sendCmd('updateOutput', output);
     },
 
-    setMeterMonitorMode: (mode) => { set({ meterMonitorMode: mode }); sendCmd('setMeterSource', mode); },
+    setMeterMonitorMode: (mode) => { set({ meterMonitorMode: mode }); },
     setLoudnessStandard: (name) => set({ loudnessStandard: name }),
 
     setRefPreset: (id, name, level) => {
       set(s => ({
         refPresets: s.refPresets.map(r => r.id === id ? { ...r, name, level } : r),
       }));
-      sendCmd('setRefPreset', id, name, level);
     },
   }))
 );

@@ -1,20 +1,37 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# TOPPING Surround Controller
 
-# Run and deploy your AI Studio app
+Professional surround-controller UI prototype for TOPPING audio devices. The app runs as a Vite + React web project and uses local mock device data during development.
 
-This contains everything you need to run your app locally.
+## Run
 
-View your app in AI Studio: https://ai.studio/apps/drive/1wM5DBa8RXiSonTLiAtnTkEU1KMCsccAO
+```bash
+npm install
+npm run dev
+```
 
-## Run Locally
+Local dev server:
 
-**Prerequisites:**  Node.js
+```text
+http://127.0.0.1:5173/
+```
 
+## Build
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+npm run build
+```
+
+Production output is written to `out/web/`.
+
+## Project Layout
+
+```text
+src/                         app source
+docs/                        design and implementation notes
+skills/                      local workflow skills used during development
+artifacts/screenshots/eq/    EQ screenshots and visual references
+dev/                         experiments, exported modules, scratch tools, notes
+out/                         generated build and report outputs
+```
+
+`package.json` contains the active run commands. Electron-specific runtime files have been removed from the active app path.

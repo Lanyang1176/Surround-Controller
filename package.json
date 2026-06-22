@@ -3,18 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "out/main/main.js",
   "scripts": {
     "dev": "vite --config vite.web.config.ts",
     "build": "vite --config vite.web.config.ts build",
-    "preview": "vite --config vite.web.config.ts preview",
-    "dev:electron": "electron-vite dev",
-    "build:electron": "electron-vite build",
-    "preview:electron": "electron-vite preview",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "preview": "vite --config vite.web.config.ts preview"
   },
   "dependencies": {
+    "@react-spring/web": "^10.0.3",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
@@ -23,14 +18,9 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@electron-toolkit/preload": "^3.0.2",
-    "@electron-toolkit/utils": "^4.0.0",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.27",
-    "electron": "^41.1.0",
-    "electron-builder": "^26.8.1",
-    "electron-vite": "^5.0.0",
     "pdf-parse": "^1.1.1",
     "postcss": "^8.5.8",
     "shadcn": "^3.7.0",

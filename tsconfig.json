@@ -26,5 +26,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src", "electron", "shared"]
+  "include": ["src"]
 }

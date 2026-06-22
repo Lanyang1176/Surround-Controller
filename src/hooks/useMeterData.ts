@@ -18,27 +18,20 @@ export function useMeterData() {
   const ref = useRef<MeterSnapshot>(EMPTY);
 
   useEffect(() => {
-    if (!window.electronAPI) {
-      let frame = 0;
-      const intervalId = window.setInterval(() => {
-        const state = useDeviceStore.getState();
-        ref.current = createMockMeterSnapshot({
-          activeSourceIds: state.activeSourceIds,
-          sources: state.sources,
-          outputs: state.outputs,
-          meterSource: state.meterMonitorMode,
-          mute: state.mute,
-          frame: frame++,
-        });
-      }, 50);
+    let frame = 0;
+    const intervalId = window.setInterval(() => {
+      const state = useDeviceStore.getState();
+      ref.current = createMockMeterSnapshot({
+        activeSourceIds: state.activeSourceIds,
+        sources: state.sources,
+        outputs: state.outputs,
+        meterSource: state.meterMonitorMode,
+        mute: state.mute,
+        frame: frame++,
+      });
+    }, 50);
 
-      return () => window.clearInterval(intervalId);
-    }
-
-    const cleanup = window.electronAPI.onMeterData((data: MeterSnapshot) => {
-      ref.current = data;
-    });
-    return () => { cleanup?.(); };
+    return () => window.clearInterval(intervalId);
   }, []);
 
   return ref;
