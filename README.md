@@ -1,37 +1,37 @@
-# TOPPING Surround Controller
+# TOPPING 环绕声控制器
 
-Professional surround-controller UI prototype for TOPPING audio devices. The app runs as a Vite + React web project and uses local mock device data during development.
+面向 TOPPING 音频设备的专业环绕声控制器 UI 原型。应用基于 Vite + React 构建，开发阶段使用本地模拟设备数据。
 
-## Run
+## 运行
 
 ```bash
 npm install
 npm run dev
 ```
 
-Local dev server:
+本地开发服务器：
 
 ```text
 http://127.0.0.1:5173/
 ```
 
-## Build
+## 构建
 
 ```bash
 npm run build
 ```
 
-Production output is written to `out/web/`.
+生产构建输出到 `out/web/`。
 
-## Project Layout
+## 项目结构
 
 ```text
-src/                         app source
-docs/                        design and implementation notes
-skills/                      local workflow skills used during development
-artifacts/screenshots/eq/    EQ screenshots and visual references
-dev/                         experiments, exported modules, scratch tools, notes
-out/                         generated build and report outputs
+src/                         应用源码
+docs/                        设计与实现说明
+skills/                      开发期间使用的本地工作流技能
+artifacts/screenshots/eq/    EQ 截图与视觉参考
+dev/                         实验、导出的模块、临时工具和笔记
+out/                         生成的构建与报告输出
 ```
 
-`package.json` contains the active run commands. Electron-specific runtime files have been removed from the active app path.
+`package.json` 包含当前可用的运行命令。Electron 专用运行时文件已从应用主路径中移除。
