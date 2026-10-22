@@ -1,5 +1,5 @@
 {
   "name": "TOPPING SURROUND CONTROLLER",
-  "description": "A high-fidelity 16-channel DAC monitor control interface with source selection, room visualization, and output routing.",
+  "description": "一款高保真 16 声道 DAC 监听控制界面，支持信号源选择、房间可视化与输出路由。",
   "requestFramePermissions": []
 }
